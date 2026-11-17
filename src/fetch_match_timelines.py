@@ -19,8 +19,7 @@ import os
 import pandas as pd
 import requests
 
-from accounts import ENV_VAR
-from compare_self import resolve_puuids
+from accounts import ENV_VAR, require_riot_ids
 from feature_config import current_season
 from fetch_match_details import REPRESENTATIVE_PLATFORM_BY_REGION, region_for_match_id
 from pipeline_io import append_ndjson, utc_now_iso
@@ -40,6 +39,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--all", action="store_true", help="Fetch every current-season match, not just the subset.")
     parser.add_argument("--max-matches", type=int, default=0, help="Stop after this many fetches (0 = no cap).")
     return parser.parse_args()
+
+
+def resolve_puuids(args: argparse.Namespace) -> list[str]:
+    """--puuid values as given, else look up each Riot ID (--riot-id or RIOT_IDS) via the API."""
+    if args.puuid:
+        return args.puuid
+    client = RiotClient(platform=args.platform)
+    puuids: list[str] = []
+    for riot_id in require_riot_ids(args.riot_id):
+        game_name, tag_line = riot_id.split("#", 1)
+        try:
+            account = client.get_account_by_riot_id_any_region(game_name=game_name.strip(), tag_line=tag_line.strip())
+        except Exception as exc:
+            print(f"Failed to resolve {riot_id}: {exc}")
+            continue
+        puuids.append(account["puuid"])
+    return puuids
 
 
 def run(args: argparse.Namespace) -> None:

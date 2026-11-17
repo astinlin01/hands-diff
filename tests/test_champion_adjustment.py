@@ -15,7 +15,7 @@ import pytest
 
 from champion_classes import champion_class
 from playstyle_space import (
-    CLUSTER_FEATURE_COLUMNS,
+    DEFAULT_FEATURE_COLUMNS,
     apply_outcome_adjuster,
     champion_groups,
     fit_outcome_adjuster,
@@ -49,7 +49,7 @@ def synthetic_role_df(seed: int = 0, games_per_champion: int = 400) -> pd.DataFr
                 "teammates_kill_diff_per_min": float(rng.normal(0.2 if win else -0.2, 0.1)),
                 "teammates_gold_diff_per_min": float(rng.normal(80 if win else -80, 30)),
             }
-            for column in CLUSTER_FEATURE_COLUMNS:
+            for column in DEFAULT_FEATURE_COLUMNS:
                 row[column] = float(rng.normal(1.0, 0.1))
             # Game-state effect: teammates being ahead inflates this player's stat (~+/-50).
             game_state = 250.0 * row["teammates_kill_diff_per_min"]
@@ -123,8 +123,8 @@ def test_unseen_champion_at_apply_time_uses_its_class():
     assert out[FEATURE].notna().all()
 
 
-def test_old_artifacts_without_champion_terms_still_work():
-    # Models fitted before this change have no champion keys; applying them must not crash.
+def test_adjuster_without_champion_terms_still_applies():
+    # The "your games" view fits without champion classes, so the adjuster has no champion keys.
     train = synthetic_role_df()
     adjuster = fit_outcome_adjuster(train, champion_classes=CLASSES, min_champion_games=MIN_GAMES)
     legacy = {k: v for k, v in adjuster.items() if not k.startswith("champion")}

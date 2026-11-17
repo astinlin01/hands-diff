@@ -61,3 +61,37 @@ def test_publish_never_falls_back_to_all_accounts(monkeypatch):
     monkeypatch.setenv("PUBLISH_RIOT_IDS", "")
     with pytest.raises(SystemExit, match="PUBLISH_RIOT_IDS"):
         require_publish_riot_ids([])
+
+
+# --- Which tier each account is compared against (COMPARE_TIERS) ---------------------------------
+# Matchmaking puts you against players of your MMR, so the fair ruler is the tier you actually
+# play in -- which can differ from your displayed rank (e.g. Master rank, GM lobbies).
+
+from accounts import compare_tier_for, parse_compare_tiers
+
+
+def test_parse_compare_tiers():
+    raw = "river#ell:GRANDMASTER, River3#NA1:master"
+    assert parse_compare_tiers(raw) == {"river#ell": "GRANDMASTER", "river3#na1": "MASTER"}
+
+
+def test_parse_compare_tiers_accepts_gm_shorthand_and_blank():
+    assert parse_compare_tiers("a#na1:GM") == {"a#na1": "GRANDMASTER"}
+    assert parse_compare_tiers("") == {}
+    assert parse_compare_tiers(None) == {}
+
+
+@pytest.mark.parametrize("raw, message", [
+    ("river#ell", "name#tag:TIER"),          # no tier
+    ("river:MASTER", "gameName#tagLine"),    # no tag
+    ("river#ell:IRON", "IRON"),              # a tier we have no reference data for
+])
+def test_parse_compare_tiers_rejects_bad_entries(raw, message):
+    with pytest.raises(ValueError, match=message):
+        parse_compare_tiers(raw)
+
+
+def test_compare_tier_lookup_is_case_insensitive_and_optional():
+    tiers = parse_compare_tiers("river#ell:GRANDMASTER")
+    assert compare_tier_for("River#ELL", tiers) == "GRANDMASTER"
+    assert compare_tier_for("other#na1", tiers) is None  # unset: the page's default applies

@@ -1,5 +1,5 @@
 """
-The dashboard recomputes profiles, labels, confidence, pool stats and gaps in the browser
+The dashboard recomputes the shape, pool stats and gaps in the browser
 (so the game-window and champion filters stay live on a static page). That math lives in
 dashboard/profile_math.js, a second copy of the Python logic -- these tests run both
 copies on the same inputs through Node and require the same answers, so the JS can't
@@ -20,7 +20,6 @@ import pytest
 
 from champion_pool import class_mix, effective_champions, top_champion
 from performance import biggest_gaps, own_sample_status
-from style_profile import confidence_label, player_profiles, profile_reliability, soft_labels
 
 JS_PATH = os.path.join(os.path.dirname(__file__), os.pardir, "dashboard", "profile_math.js")
 NODE = shutil.which("node")
@@ -45,48 +44,20 @@ def nan_to_none(value):
     return None if value is None or (isinstance(value, float) and math.isnan(value)) else value
 
 
-# --- Style profile ----------------------------------------------------------------------------
+# --- Area profile: one player's average per area ------------------------------------------------
 
-def test_trait_profile_matches_python():
-    scores = pd.DataFrame({"Lane Bully": [1.0, 3.0, np.nan], "Vision Control": [0.5, np.nan, 2.0]})
-    profiles, counts = player_profiles(scores, pd.Series(["me"] * 3))
-    games = [{k: nan_to_none(v) for k, v in row.items()} for row in scores.to_dict("records")]
-    result = js("traitProfile", games, ["Lane Bully", "Vision Control"])
-    for trait in ["Lane Bully", "Vision Control"]:
-        assert result["profile"][trait] == pytest.approx(profiles.loc["me", trait])
-        assert result["counts"][trait] == counts.loc["me", trait]
+def test_area_profile_hand_checked():
+    games = [{"Damage": 1.0, "Survival": 0.5}, {"Damage": 3.0, "Survival": None}, {"Damage": None, "Survival": 2.0}]
+    result = js("areaProfile", games, ["Damage", "Survival"])
+    # Damage: (1 + 3) / 2 over 2 games; Survival: (0.5 + 2) / 2 over 2 games
+    assert result["profile"] == {"Damage": pytest.approx(2.0), "Survival": pytest.approx(1.25)}
+    assert result["counts"] == {"Damage": 2, "Survival": 2}
 
 
-def test_trait_profile_all_missing_is_null():
-    result = js("traitProfile", [{"Lane Bully": None}], ["Lane Bully"])
-    assert result["profile"]["Lane Bully"] is None
-    assert result["counts"]["Lane Bully"] == 0
-
-
-ARCHETYPES = {
-    "Safe Farmer": {"Farm-Focused": 1, "Death-Prone": -1},
-    "Aggressive Skirmisher": {"Death-Prone": 1, "Duelist": 1},
-    "Vision-Focused": {"Vision Control": 1},
-}
-
-
-@pytest.mark.parametrize("profile", [
-    {"Farm-Focused": 1.2, "Death-Prone": -0.9, "Duelist": 0.1, "Vision Control": 0.3},
-    {"Farm-Focused": -1.0, "Death-Prone": 1.0, "Duelist": -1.0, "Vision Control": 0.0},
-    {"Farm-Focused": 0.2, "Death-Prone": None, "Duelist": 0.4, "Vision Control": 1.5},
-])
-def test_soft_labels_match_python(profile):
-    expected = soft_labels(pd.Series(profile, dtype=float), "BOTTOM", {"BOTTOM": ARCHETYPES}, top=3)
-    result = js("softLabels", profile, ARCHETYPES, 3)
-    assert [name for name, _ in result] == [name for name, _ in expected]
-    assert [pct for _, pct in result] == pytest.approx([pct for _, pct in expected])
-
-
-@pytest.mark.parametrize("r, n", [(0.25, 20), (0.05, 40), (0.6, 3), (0.3, 0)])
-def test_confidence_matches_python(r, n):
-    reliability = profile_reliability(r, n)
-    assert js("profileReliability", r, n) == pytest.approx(reliability)
-    assert js("confidenceLabel", reliability) == confidence_label(reliability)
+def test_area_profile_all_missing_is_null():
+    result = js("areaProfile", [{"Damage": None}], ["Damage"])
+    assert result["profile"]["Damage"] is None
+    assert result["counts"]["Damage"] == 0
 
 
 @pytest.mark.parametrize("games", [0, 4, 5, 9, 10, 50])
@@ -180,18 +151,53 @@ def test_gap_size_matches_python(feature, you, median):
     assert result["per_game"] == expected["per_game"]
 
 
-# --- Style map default axes: your two most distinctive traits (furthest from the 50th) ---------------
+# --- Performance shape --------------------------------------------------------------------------
 
-def test_default_map_axes():
-    rows = [
-        {"trait": "Lane Bully", "percentile": 73},
-        {"trait": "Vision Control", "percentile": 64},
-        {"trait": "Death-Prone", "percentile": 17},   # |17 - 50| = 33
-        {"trait": "Enchanter", "percentile": 15},     # |15 - 50| = 35
-        {"trait": "Damage Carry", "percentile": 48},
-    ]
-    assert js("defaultMapAxes", rows) == ["Enchanter", "Death-Prone"]
+from performance_shape import champion_effect
 
 
-def test_default_map_axes_needs_two_traits():
-    assert js("defaultMapAxes", [{"trait": "Lane Bully", "percentile": 73}]) is None
+def test_champion_effect_matches_python():
+    games = [{"Farming": 0.8, "Damage": 0.5}, {"Farming": 0.8, "Damage": None}, {"Farming": 0.1, "Damage": 0.2}]
+    hands = [{"Farming": 0.5, "Damage": 0.5}, {"Farming": 0.5, "Damage": None}, {"Farming": 0.2, "Damage": 0.1}]
+    champions = ["Kaisa", "Kaisa", "Jinx"]
+    sd = {"Farming": 0.5, "Damage": 0.4}
+    expected = champion_effect(
+        pd.DataFrame(games, dtype=float), pd.DataFrame(hands, dtype=float), pd.Series(champions), pd.Series(sd)
+    )
+    got = js("championEffect", games, hands, champions, sd, ["Farming", "Damage"])
+    for area in ("Farming", "Damage"):
+        assert got[area]["effect_sd"] == pytest.approx(expected[area]["effect_sd"])
+        assert got[area]["driver"] == expected[area]["driver"]
+        assert got[area]["driver_share"] == pytest.approx(expected[area]["driver_share"])
+
+
+def test_champion_effect_hand_checked():
+    # Farming per-game (games - hands): [0.3, 0.3, -0.1] -> mean 1/6, / sd 0.5 = 1/3;
+    # Kai'Sa pushes +0.6 of the +0.5 total -> share 1.2.
+    got = js("championEffect", [{"Farming": 0.8}, {"Farming": 0.8}, {"Farming": 0.1}],
+             [{"Farming": 0.5}, {"Farming": 0.5}, {"Farming": 0.2}], ["Kaisa", "Kaisa", "Jinx"], {"Farming": 0.5}, ["Farming"])
+    assert got["Farming"] == {"effect_sd": pytest.approx(1 / 3), "driver": "Kaisa", "driver_share": pytest.approx(1.2)}
+
+
+@pytest.mark.parametrize("percentile, top, band, verdict", [
+    (95.3, 5, "top 10%", "strength"),
+    (89.8, 10, "top 10%", "strength"),     # rounds to top 10%: the label and the band must agree
+    (87.4, 13, "top 25%", "strength"),
+    (75.0, 25, "top 25%", "strength"),
+    (60.0, 40, "middle", "middle"),
+    (25.0, 75, "bottom 25%", "weakness"),
+    (8.0, 92, "bottom 10%", "weakness"),
+    (99.9, 1, "top 10%", "strength"),       # never "top 0%"
+])
+def test_shape_bands(percentile, top, band, verdict):
+    assert js("topPct", percentile) == top
+    assert js("shapeBand", percentile) == band
+    assert js("shapeVerdict", percentile) == verdict
+
+
+@pytest.mark.parametrize("damage, survival, label", [
+    (90, 78, "Efficient carry"), (20, 80, "Safe, low impact"), (85, 10, "Glass cannon"), (30, 30, "Struggling"),
+    (50, 50, "Efficient carry"),  # the median player sits on the corner; ties go up and right
+])
+def test_quadrant_label(damage, survival, label):
+    assert js("quadrantLabel", damage, survival) == label

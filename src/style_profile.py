@@ -1,26 +1,14 @@
 """
-Trait-axis style profiles with soft archetype labels and a confidence level (Phase 2).
+Early-game adjustment, standardizing, percentiles and reliability -- the building blocks
+under the performance shape (performance_shape.py) and the gaps (performance.py).
 
-Replaces KMeans as the main "what kind of player am I" view. Per role:
-
-    game-level adjusted features            (playstyle_space.apply_outcome_adjuster for
-                                             end-of-game features, apply_early_adjuster
-                                             for timeline features)
-    -> standardized (z, role population)    fit_standardizer / standardize
-    -> per-game trait scores                game_trait_scores: mean z of the trait's
-                                             *available* features
-    -> player profile                       player_profiles: mean over games, plus how
-                                             many games fed each trait
-    -> percentile vs other players          trait_percentiles (reference = profiles of
-                                             players with 10+ games in the role)
-    -> soft archetype labels                soft_labels: cosine match to ROLE_ARCHETYPES
-    -> confidence                           single_game_reliability (ICC) +
-                                             profile_reliability (Spearman-Brown)
-
-Why traits instead of clusters: silhouette scores of 0.12-0.15 said the data is a
-continuum, not groups, so KMeans drew arbitrary lines through it. A trait axis ("78th
-percentile Lane Bully") describes the continuum directly; archetype names become
-labels ("72% Safe Farmer"), not boxes.
+    early (<=14:00) features   fit_early_adjuster / apply_early_adjuster: champion only
+    standardizing              fit_standardizer / standardize: z vs the role population
+    percentiles                trait_percentiles: vs reference players' averages
+    reliability                single_game_reliability (ICC) and profile_reliability
+                               (Spearman-Brown): how much an average over N games is
+                               signal rather than game-to-game luck. Used to validate the
+                               areas (see method_diagnostics.py).
 """
 
 from __future__ import annotations
@@ -29,13 +17,8 @@ import numpy as np
 import pandas as pd
 from scipy.stats import percentileofscore
 
-from playstyle_space import MIN_CHAMPION_GAMES, _signature_match, champion_groups
+from playstyle_space import MIN_CHAMPION_GAMES, champion_groups
 from champion_classes import champion_class
-
-# Spearman-Brown reliability of a profile -> label. 0.7 is the conventional "good enough
-# to compare individuals" bar; below 0.5 more than half the profile's variance is noise.
-CONFIDENCE_THRESHOLDS = ((0.7, "high"), (0.5, "medium"))
-
 
 # ---------- Early (timeline) feature adjustment ----------
 #
@@ -107,28 +90,7 @@ def standardize(df: pd.DataFrame, standardizer: dict) -> pd.DataFrame:
     return (df[columns] - standardizer["mean"][columns]) / standardizer["std"][columns]
 
 
-def game_trait_scores(z: pd.DataFrame, traits: list[tuple[str, tuple[str, ...]]]) -> pd.DataFrame:
-    """Per game: each trait = mean z of its features that are present and non-NaN.
-
-    "Available" matters because games without a timeline have NaN early features; those
-    games are scored on the trait's end-of-game features alone instead of imputing a
-    fake average early game. A trait with nothing available for a game is NaN.
-    """
-    scores = {}
-    for trait, features in traits:
-        present = [f for f in features if f in z.columns]
-        if present:
-            scores[trait] = z[present].mean(axis=1, skipna=True)
-    return pd.DataFrame(scores, index=z.index)
-
-
 # ---------- Player profiles and percentiles ----------
-
-def player_profiles(scores: pd.DataFrame, puuids: pd.Series) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """(mean trait score per player, number of non-NaN games behind each mean)."""
-    grouped = scores.groupby(puuids.to_numpy())
-    return grouped.mean(), grouped.count()
-
 
 def trait_percentiles(profile: pd.Series, reference: pd.DataFrame) -> pd.Series:
     """Percentile of each trait vs the reference players' profiles (ties count half)."""
@@ -139,31 +101,7 @@ def trait_percentiles(profile: pd.Series, reference: pd.DataFrame) -> pd.Series:
     return pd.Series(result)
 
 
-# ---------- Soft archetype labels ----------
-
-def soft_labels(
-    profile: pd.Series,
-    role: str,
-    archetypes: dict[str, dict[str, dict[str, float]]],
-    top: int = 2,
-) -> list[tuple[str, float]]:
-    """Top-N (archetype, match %) for a profile, best first.
-
-    Match % = cosine similarity between the profile and the archetype's trait signature
-    (playstyle_space._signature_match, which also penalizes being extreme on traits the
-    signature doesn't mention), clamped to 0-100: an opposite profile is a 0% match, not
-    a negative one.
-    """
-    profile = profile.dropna()
-    matches = [
-        (name, float(np.clip(_signature_match(profile, signature) * 100.0, 0.0, 100.0)))
-        for name, signature in archetypes.get(role, {}).items()
-    ]
-    matches.sort(key=lambda item: item[1], reverse=True)
-    return matches[:top]
-
-
-# ---------- Confidence ----------
+# ---------- Reliability ----------
 
 def single_game_reliability(scores: pd.DataFrame, puuids: pd.Series) -> pd.Series:
     """ICC(1) per trait: the share of game-to-game variance that's between players.
@@ -201,10 +139,3 @@ def profile_reliability(single_game: float, games: int) -> float:
     if games <= 0 or not np.isfinite(single_game):
         return 0.0
     return games * single_game / (1 + (games - 1) * single_game)
-
-
-def confidence_label(reliability: float) -> str:
-    for threshold, label in CONFIDENCE_THRESHOLDS:
-        if reliability >= threshold:
-            return label
-    return "low"

@@ -42,6 +42,47 @@ def parse_riot_ids(raw: str | None, env_var: str = ENV_VAR) -> list[str]:
     return ids
 
 
+COMPARE_ENV_VAR = "COMPARE_TIERS"
+# Tiers with reference data (see export_dashboard_data.TIER_RANK); "GM" is accepted as shorthand.
+COMPARE_TIER_NAMES = ("CHALLENGER", "GRANDMASTER", "MASTER", "DIAMOND")
+_TIER_ALIASES = {"GM": "GRANDMASTER"}
+
+
+def parse_compare_tiers(raw: str | None) -> dict[str, str]:
+    """COMPARE_TIERS=name#tag:TIER[, ...] -> {lowercased riot id: TIER}.
+
+    The tier each account is ranked against by default. Matchmaking pairs you with players
+    of your MMR, so this should be the tier you actually play in, which can differ from
+    the rank shown on your profile (e.g. Master rank with GM-level lobbies).
+    """
+    if not raw:
+        return {}
+    tiers: dict[str, str] = {}
+    for part in raw.strip().strip('"').strip("'").split(","):
+        entry = part.strip()
+        if not entry:
+            continue
+        riot_id, sep, tier = entry.rpartition(":")
+        if not sep:
+            raise ValueError(f"{COMPARE_ENV_VAR}: {entry!r} is not in name#tag:TIER form")
+        parse_riot_ids(riot_id, COMPARE_ENV_VAR)  # validates gameName#tagLine
+        tier = _TIER_ALIASES.get(tier.strip().upper(), tier.strip().upper())
+        if tier not in COMPARE_TIER_NAMES:
+            raise ValueError(f"{COMPARE_ENV_VAR}: tier {tier!r} has no reference data (use one of {', '.join(COMPARE_TIER_NAMES)})")
+        tiers[riot_id.strip().lower()] = tier
+    return tiers
+
+
+def default_compare_tiers() -> dict[str, str]:
+    load_dotenv()
+    return parse_compare_tiers(os.getenv(COMPARE_ENV_VAR))
+
+
+def compare_tier_for(riot_id: str, tiers: dict[str, str]) -> str | None:
+    """The account's comparison tier, or None if unset (the page's default applies)."""
+    return tiers.get(riot_id.strip().lower())
+
+
 def default_riot_ids() -> list[str]:
     """Riot IDs from RIOT_IDS (environment or .env). Empty list if unset."""
     load_dotenv()  # no override: a real environment variable beats .env

@@ -191,25 +191,85 @@
     .hero-art::after { background: linear-gradient(0deg, var(--page) 0%, color-mix(in oklab, var(--page) 80%, transparent) 60%, color-mix(in oklab, var(--page) 55%, transparent) 100%); }
   }
 
-  /* Style map */
-  .map-panel { padding: 16px 18px 12px; }
-  .map-controls { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8px; }
-  #style-map svg { width: 100%; max-width: 760px; height: auto; display: block; margin: 0 auto; }
-  .map-arch, .map-landmark-label, .map-you-label { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
-  .map-grid { stroke: var(--gridline); stroke-width: 1; }
-  .map-mid { stroke: var(--ink-muted); stroke-width: 1; stroke-dasharray: 3 4; opacity: .7; }
-  .map-axis { fill: var(--ink-2); font-size: 13px; font-weight: 600; }
-  .map-tick { fill: var(--ink-muted); font-size: 11px; font-family: "IBM Plex Mono", monospace; }
-  .map-dot { fill: var(--ink-muted); opacity: .45; }
-  .map-arch { fill: var(--ink-muted); font-size: 12px; font-style: italic; opacity: .9; }
-  .map-landmark { fill: var(--slot-3); stroke: var(--surface); stroke-width: 1.5; }
-  .map-landmark-label { fill: var(--ink-2); font-size: 11.5px; font-weight: 600; }
-  .map-you { fill: var(--accent); stroke: var(--surface); stroke-width: 2.5; }
-  .map-you-halo { fill: none; stroke: var(--accent); stroke-width: 2; opacity: .35; transform-box: fill-box; transform-origin: center; animation: halo 2.4s ease-out infinite; }
-  .map-you-label { fill: var(--accent); font-size: 13px; font-weight: 700; }
-  @keyframes halo { from { transform: scale(1); opacity: .5; } to { transform: scale(2.6); opacity: 0; } }
-  @media (prefers-reduced-motion: reduce) { .map-you-halo { animation: none; } }
-  .map-note { font-size: 12.5px; color: var(--ink-muted); margin-top: 6px; }
+  /* ---------- Performance shape ---------- */
+  :root { --games: var(--slot-1); --hands: var(--accent); --target: var(--slot-3); }
+  .ink-games { color: var(--games); }
+  .ink-hands { color: var(--hands); }
+  .shape-panel { padding: 16px 18px 14px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 3px; background: var(--surface-2); }
+  .seg button { appearance: none; border: 0; background: none; font: inherit; cursor: pointer; padding: 6px 15px; border-radius: 999px;
+                font-size: 13px; font-weight: 600; color: var(--ink-2); }
+  .seg button.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.16); }
+  .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #shape-chart svg, #risk-chart svg { width: 100%; height: auto; display: block; margin: 0 auto; overflow: visible; }
+  #shape-chart svg { max-width: 560px; }
+  .shape-cap { font-size: 13.5px; color: var(--ink-2); margin: 4px 0 0; text-align: center; }
+  .shape-grid { fill: none; stroke: var(--gridline); }
+  .shape-base { fill: var(--ink-muted); fill-opacity: .26; stroke: var(--ink-muted); stroke-opacity: .7; stroke-width: 1.5; }
+  .shape-base-label { fill: var(--ink-2); font-size: 10.5px; font-weight: 700; letter-spacing: .06em; }
+  .shape-base-sub { fill: var(--ink-2); font-size: 10px; }
+  .shape-axis { fill: var(--ink); font-size: 14px; font-weight: 700; }
+  .shape-val { font-size: 12px; font-weight: 800; letter-spacing: .04em; }
+  .shape-val.elite { font-size: 14px; }
+  .shape-target { fill: var(--target); stroke: var(--surface); stroke-width: 1.2; }
+  .shape-you { transform-box: view-box; animation: shape-grow .7s cubic-bezier(.2,.9,.3,1.25) both; }
+  @keyframes shape-grow { from { transform: scale(.5); opacity: .3; } to { transform: scale(1); opacity: 1; } }
+  .shape-glow { animation: glow-pulse 1.6s ease-out .5s 1 both; }
+  @keyframes glow-pulse { 0% { opacity: 0; } 35% { opacity: .9; } 100% { opacity: .5; } }
+  .shape-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; font-size: 12.5px; color: var(--ink-2); margin-top: 6px; }
+  .shape-legend i { display: inline-block; width: 12px; height: 12px; margin-right: 5px; vertical-align: -1px; border-radius: 3px; }
+  @media (prefers-reduced-motion: reduce) { .shape-you, .shape-glow { animation: none; } }
+
+  .area-row { display: grid; grid-template-columns: 120px minmax(0, 1fr) 270px; gap: 4px 18px; align-items: center; padding: 14px 22px; border-top: 1px solid var(--gridline); }
+  .area-row:first-of-type { border-top: 0; }
+  .area-name { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 19px; line-height: 1.1; }
+  .area-top { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--hands); font-weight: 500; }
+  .area-note { font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+  .area-note .side { color: var(--ink-muted); }
+  .area-tag { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 3px; }
+  .area-tag.hands { background: color-mix(in oklab, var(--hands) 15%, transparent); color: var(--hands); }
+  .area-tag.champ { background: color-mix(in oklab, var(--games) 16%, transparent); color: var(--games); }
+  .area-tag.grow { background: color-mix(in oklab, var(--critical) 14%, transparent); color: var(--critical); }
+  .area-chips { grid-column: 2 / 3; display: flex; flex-wrap: wrap; gap: 6px; }
+  .area-chip { font-size: 12px; background: var(--surface-2); border-radius: 8px; padding: 4px 9px; color: var(--ink-2); }
+  .area-chip b { font-family: "IBM Plex Mono", monospace; font-weight: 500; color: var(--ink); }
+  .area-chip .up { color: var(--good); } .area-chip .down { color: var(--critical); }
+  .db-track { fill: var(--gridline); }
+  .db-mid { stroke: var(--ink-muted); stroke-width: 1.5; }
+  .db-tick { stroke: var(--ink-muted); stroke-width: 2; }
+  .db-tick.target { stroke: var(--target); }
+  .db-tick-label { fill: var(--ink-muted); font-size: 10px; font-weight: 700; }
+  .db-tick-label.target { fill: var(--target); }
+  .db-link { stroke: var(--ink-2); stroke-width: 2; }
+  .db-games { fill: var(--surface); stroke: var(--games); stroke-width: 2.5; }
+  .db-hands { fill: var(--hands); stroke: var(--surface); stroke-width: 1.5; }
+  .areas-key { padding: 12px 22px; font-size: 12.5px; color: var(--ink-2); border-bottom: 1px solid var(--gridline); }
+  @media (max-width: 720px) {
+    .area-row { grid-template-columns: 1fr; padding: 14px 16px; }
+    .area-chips { grid-column: 1; }
+  }
+
+  .risk-panel { padding: 16px 18px 14px; }
+  #risk-chart svg { max-width: 820px; }
+  .risk-grid { stroke: var(--gridline); stroke-width: 1; }
+  .risk-mid { stroke: var(--ink-muted); stroke-width: 1.2; }
+  .risk-tick { fill: var(--ink-muted); font-size: 10.5px; font-family: "IBM Plex Mono", monospace; }
+  .risk-axis { fill: var(--ink-2); font-size: 13px; font-weight: 700; }
+  .risk-corner { font-size: 11.5px; font-weight: 700; letter-spacing: .08em; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+  .risk-corner.good { fill: var(--good); } .risk-corner.bad { fill: var(--critical); } .risk-corner.mid { fill: var(--target); }
+  .risk-dot { fill: var(--ink-muted); opacity: .3; }
+  .risk-tier { fill: var(--ink-2); stroke: var(--surface); stroke-width: 2; }
+  .risk-tier.target { fill: var(--target); }
+  .risk-tier-label { fill: var(--ink-2); font-size: 11.5px; font-weight: 700; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+  .risk-tier-label.target { fill: var(--target); }
+  .risk-you { fill: var(--hands); stroke: var(--surface); stroke-width: 2.5; }
+  .risk-you-halo { fill: var(--hands); opacity: .16; }
+  .risk-you-label { fill: var(--hands); font-size: 14px; font-weight: 800; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+  .risk-note { border-left: 3px solid var(--good); padding: 10px 14px; background: color-mix(in oklab, var(--good) 7%, var(--surface));
+               border-radius: 0 10px 10px 0; color: var(--ink-2); margin-top: 12px; font-size: 13.5px; line-height: 1.5; }
+  .risk-note.bad { border-left-color: var(--critical); background: color-mix(in oklab, var(--critical) 7%, var(--surface)); }
+  .risk-note.mid { border-left-color: var(--target); background: color-mix(in oklab, var(--target) 9%, var(--surface)); }
+  .risk-note b { color: var(--ink); }
   .masthead h1 { font-size: clamp(30px, 4vw, 42px); margin-top: 10px; }
   .masthead .sub { color: var(--ink-2); margin-top: 8px; font-size: 15px; max-width: 60ch; }
   /* ---------- Filter bar ---------- */
@@ -378,27 +438,14 @@
   }
 
 
-  /* ---------- Style profile ---------- */
-  .labels-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 16px 22px; border-bottom: 1px solid var(--gridline); }
-  .labels-row .hint { font-size: 12.5px; color: var(--ink-muted); }
-  .label-chip { display: inline-flex; align-items: baseline; gap: 7px; padding: 5px 12px; border-radius: 999px; font-weight: 600; font-size: 13.5px;
-    background: color-mix(in oklab, var(--accent-jade) 15%, transparent); color: var(--ink); }
-  .label-chip .pctv { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 16px; color: var(--accent-jade); }
-  .label-chip.secondary { background: var(--surface-2); }
-  .label-chip.secondary .pctv { color: var(--ink-2); }
   .notice { padding: 10px 22px; font-size: 12.5px; color: var(--ink-2); border-bottom: 1px solid var(--gridline);
     background: color-mix(in oklab, var(--slot-3) 13%, transparent); }
-  .divbar-row.style-row { grid-template-columns: 150px 1fr 52px 92px; }
-  .conf { font-size: 12px; color: var(--ink-muted); white-space: nowrap; display: flex; align-items: center; gap: 6px; }
-  .conf .dots { letter-spacing: 1px; color: var(--accent-jade); font-size: 11px; }
-  .muted-list { padding: 0 22px 16px; font-size: 12.5px; color: var(--ink-muted); }
-  /* Phones: name, value and confidence on one line, the bar full-width underneath. */
+  /* Phones: name and value on one line, the bar full-width underneath. */
   @media (max-width: 720px) {
     .filter-bar { padding: 0 20px; }
-    .divbar-row, .divbar-row.style-row, .divbar-row.marker-row { grid-template-columns: 1fr auto auto; row-gap: 6px; }
+    .divbar-row, .divbar-row.marker-row { grid-template-columns: 1fr auto auto; row-gap: 6px; }
     .divbar-row .divbar-label { grid-row: 1; grid-column: 1; }
     .divbar-row .divbar-value { grid-row: 1; grid-column: 2; }
-    .divbar-row .conf { grid-row: 1; grid-column: 3; }
     .divbar-row > .divbar-track, .divbar-row > .pctbar-track, .divbar-row > .marker-track { grid-row: 2; grid-column: 1 / -1; }
     .mix-row { grid-template-columns: 84px 1fr 1fr; gap: 10px; }
   }
@@ -489,28 +536,38 @@
 
 <div class="wrap">
 
-  <section id="section-style">
+  <section id="section-shape">
     <div class="section-head">
-      <div class="eyebrow">Who you are</div>
-      <h2 id="style-heading">Your playstyle</h2>
-      <p id="style-sub">&nbsp;</p>
+      <div class="eyebrow">Champ diff or hands diff?</div>
+      <h2 id="shape-heading">Your shape</h2>
+      <p id="shape-sub">&nbsp;</p>
     </div>
-    <div class="panel" id="style-panel"></div>
+    <div class="panel shape-panel">
+      <div class="seg" id="shape-toggle" role="group" aria-label="Shape view">
+        <button type="button" data-view="games" aria-pressed="false">Your games</button>
+        <button type="button" data-view="hands" aria-pressed="true" class="on">Your hands</button>
+      </div>
+      <div id="shape-chart"></div>
+      <p class="shape-cap" id="shape-cap"></p>
+    </div>
   </section>
 
-  <section id="section-map">
+  <section id="section-areas">
     <div class="section-head">
-      <div class="eyebrow">Style map</div>
-      <h2 id="map-heading">Where you sit</h2>
-      <p id="map-sub">&nbsp;</p>
+      <div class="eyebrow">Area by area</div>
+      <h2>What&rsquo;s you, and what&rsquo;s your champions</h2>
+      <p id="areas-sub">&nbsp;</p>
     </div>
-    <div class="panel map-panel">
-      <div class="map-controls">
-        <div class="filter-field"><label for="map-x">Across (X)</label><select id="map-x"></select></div>
-        <div class="filter-field"><label for="map-y">Up (Y)</label><select id="map-y"></select></div>
-      </div>
-      <div id="style-map"></div>
+    <div class="panel" id="areas-panel"></div>
+  </section>
+
+  <section id="section-risk">
+    <div class="section-head">
+      <div class="eyebrow">Risk for damage</div>
+      <h2 id="risk-heading">What your damage costs you</h2>
+      <p id="risk-sub">&nbsp;</p>
     </div>
+    <div class="panel risk-panel"><div id="risk-chart"></div><div class="risk-note" id="risk-note"></div></div>
   </section>
 
   <section id="section-pool">
@@ -734,7 +791,9 @@
     regionSelect.value = (available.indexOf(previous) !== -1) ? previous : available[0];
   }
 
-  function refreshTierOptions() {
+  // useAccountDefault: on load and account switch, start from the account's COMPARE_TIERS
+  // setting (the tier it actually plays in); otherwise keep whatever was picked.
+  function refreshTierOptions(useAccountDefault) {
     var role = roleSelect.value;
     var region = regionSelect.value;
     var previous = tierSelect.value;
@@ -747,7 +806,10 @@
       opt.textContent = titleCase(tier);
       tierSelect.appendChild(opt);
     });
-    if (available.indexOf(previous) !== -1) {
+    var accountTier = DATA.compare_tiers && DATA.compare_tiers[accountSelect.value];
+    if (useAccountDefault && accountTier && available.indexOf(accountTier) !== -1) {
+      tierSelect.value = accountTier;
+    } else if (available.indexOf(previous) !== -1) {
       tierSelect.value = previous;
     } else if (available.indexOf('CHALLENGER') !== -1) {
       tierSelect.value = 'CHALLENGER';
@@ -757,13 +819,13 @@
   refreshRoleOptions();
   refreshChampionOptions();
   refreshRegionOptions();
-  refreshTierOptions();
+  refreshTierOptions(true);
 
   accountSelect.addEventListener('change', function () {
     refreshRoleOptions();
     refreshChampionOptions();
     refreshRegionOptions();
-    refreshTierOptions();
+    refreshTierOptions(true);
     renderAll();
   });
   roleSelect.addEventListener('change', function () {
@@ -897,7 +959,6 @@
   }
 
   // ---------- Shared helpers for the profile sections ----------
-  var MIN_LABEL_MATCH = 45;  // playstyle_space.MIN_ARCHETYPE_MATCH, as a percent
 
   function featureLabel(f) { return (DATA.feature_labels && DATA.feature_labels[f]) || f; }
   function fmtStat(f, v) {
@@ -937,116 +998,67 @@
     return '';
   }
 
-  // ---------- Style profile ----------
-  function computeStyle(filters, games) {
+  // ---------- Performance shape ----------
+  // Five areas in two views: "games" (as played, champions included) and "hands" (vs players
+  // on the same champions). Percentiles are vs the selected tier's players (10+ games).
+  var TIER_SHORT = { DIAMOND: 'D', MASTER: 'M', GRANDMASTER: 'GM', CHALLENGER: 'C' };
+  var CHAMPION_NAMES = { Kaisa: "Kai'Sa", KSante: "K'Sante", Khazix: "Kha'Zix", Chogath: "Cho'Gath", Velkoz: "Vel'Koz",
+                         Kogmaw: "Kog'Maw", RekSai: "Rek'Sai", Belveth: "Bel'Veth", MonkeyKing: 'Wukong', MissFortune: 'Miss Fortune',
+                         TahmKench: 'Tahm Kench', TwistedFate: 'Twisted Fate', XinZhao: 'Xin Zhao', JarvanIV: 'Jarvan IV',
+                         LeeSin: 'Lee Sin', MasterYi: 'Master Yi', DrMundo: 'Dr. Mundo', AurelionSol: 'Aurelion Sol', Nunu: 'Nunu & Willump' };
+  function champName(c) { return CHAMPION_NAMES[c] || c; }
+  function bandText(p) { var b = PM.shapeBand(p); return b === 'middle' ? 'the middle of the pack' : b.indexOf('bottom') === 0 ? 'the ' + b : b; }
+  function topText(p) { var t = PM.topPct(p); return t <= 50 ? 'TOP ' + t + '%' : 'BOTTOM ' + Math.max(1, Math.round(p)) + '%'; }
+  function cap1(t) { return t.charAt(0).toUpperCase() + t.slice(1); }
+  function playersNoun(role) { return role === 'BOTTOM' ? 'ADCs' : role === 'UTILITY' ? 'supports' : role === 'JUNGLE' ? 'junglers' : roleLabel(role).toLowerCase() + ' laners'; }
+
+  function computeShape(filters, games) {
     if (filters.role === ALL_ROLES) return { state: 'all-roles' };
-    var role = DATA.roles[filters.role];
+    var shape = DATA.roles[filters.role] && DATA.roles[filters.role].shape;
     var n = games.length;
     if (PM.ownSampleStatus(n) === 'insufficient') return { state: 'few-games', n: n };
-    var curves = tierCurves(role.style_reference, filters);
-    if (!curves) return { state: 'no-ref', refN: refCount(role.style_reference, filters) };
-
-    var tp = PM.traitProfile(games.map(function (g) { return g.traits || {}; }), role.traits);
-    var rows = [], missing = [];
-    role.traits.forEach(function (trait) {
-      var value = tp.profile[trait], curve = curves[trait];
-      if (value === null || !curve) { missing.push(trait); return; }
-      var reliability = PM.profileReliability(role.trait_reliability[trait], tp.counts[trait]);
-      rows.push({
-        trait: trait, games: tp.counts[trait], reliability: reliability,
-        confidence: PM.confidenceLabel(reliability),
-        percentile: percentileFromBreakpoints(value, curve.breakpoints)
+    if (!shape) return { state: 'no-ref', refN: 0 };
+    var curves = { games: tierCurves(shape.reference.games, filters), hands: tierCurves(shape.reference.hands, filters) };
+    if (!curves.games || !curves.hands) return { state: 'no-ref', refN: refCount(shape.reference.hands, filters) };
+    var areas = shape.areas, views = {};
+    ['games', 'hands'].forEach(function (view) {
+      var tp = PM.areaProfile(games.map(function (g) { return (g.shape && g.shape[view]) || {}; }), areas);
+      var pct = {}, tiers = {};
+      areas.forEach(function (a) {
+        pct[a] = tp.profile[a] === null || !curves[view][a] ? null : percentileFromBreakpoints(tp.profile[a], curves[view][a].breakpoints);
       });
+      // Other tiers' typical (median) player, placed on the selected tier's scale.
+      var regionRef = shape.reference[view][filters.region] || {};
+      DATA.tiers.forEach(function (t) {
+        if (t === filters.tier || !regionRef[t]) return;
+        tiers[t] = {};
+        areas.forEach(function (a) {
+          tiers[t][a] = regionRef[t][a] && curves[view][a] ? percentileFromBreakpoints(regionRef[t][a].median, curves[view][a].breakpoints) : null;
+        });
+      });
+      views[view] = { pct: pct, counts: tp.counts, tiers: tiers };
     });
-    rows.sort(function (a, b) { return b.percentile - a.percentile; });
-    return {
-      state: 'ok', n: n, sample: PM.ownSampleStatus(n), rows: rows, missing: missing,
-      labels: PM.softLabels(tp.profile, role.archetypes, 2)
-    };
-  }
-
-  var CONFIDENCE_DOTS = { high: '●●●', medium: '●●○', low: '●○○' };
-
-  function renderStyle(filters, games) {
-    var panel = document.getElementById('style-panel');
-    document.getElementById('style-heading').textContent = 'Your ' + scopeLabelOf(filters) + ' playstyle';
-    document.getElementById('style-sub').textContent =
-      'Each bar is a trait: your average over the selected games, as a percentile among ' + tierLabelOf(filters) + ' ' +
-      roleLabel(filters.role) + ' players (10+ games each). Stats are adjusted for the champion played and your teammates’ ' +
-      'lead first, so this describes how you play, not what you pick or whether your team won. Confidence says how settled ' +
-      'each trait is at your number of games.';
-
-    var style = computeStyle(filters, games);
-    if (style.state !== 'ok') { panel.innerHTML = emptyState(stateMessage(style, filters, 'playstyle')); return; }
-
-    panel.innerHTML = '';
-    var labelsRow = document.createElement('div');
-    labelsRow.className = 'labels-row';
-    var fits = style.labels.filter(function (l) { return l[1] >= MIN_LABEL_MATCH; });
-    if (fits.length) {
-      labelsRow.innerHTML = fits.map(function (l, i) {
-        return '<span class="label-chip' + (i ? ' secondary' : '') + '"><span class="pctv">' + Math.round(l[1]) + '%</span>' + l[0] + '</span>';
-      }).join('') + '<span class="hint">closest archetypes (match %)</span>';
-    } else {
-      labelsRow.innerHTML = '<span class="hint">No archetype fits well (best: ' +
-        (style.labels[0] ? style.labels[0][0] + ', ' + Math.round(style.labels[0][1]) + '%' : '—') +
-        '). Your profile mixes traits more than any single archetype does.</span>';
-    }
-    panel.appendChild(labelsRow);
-
-    if (style.sample === 'low') {
-      var notice = document.createElement('div');
-      notice.className = 'notice';
-      notice.textContent = lowSampleNotice(style.n);
-      panel.appendChild(notice);
-    }
-
-    var bars = document.createElement('div');
-    bars.className = 'divbars';
-    style.rows.forEach(function (r) {
-      var row = document.createElement('div');
-      row.className = 'divbar-row style-row';
-      var label = document.createElement('div');
-      label.className = 'divbar-label';
-      label.textContent = r.trait;
-
-      var track = document.createElement('div');
-      track.className = 'divbar-track';
-      var axis = document.createElement('div');
-      axis.className = 'divbar-axis';
-      var fill = document.createElement('div');
-      var above = r.percentile >= 50;
-      fill.className = 'divbar-fill ' + (above ? 'pos' : 'neg');
-      fill.style.width = Math.max(Math.abs(r.percentile - 50), 0.8) + '%';
-      fill.tabIndex = 0;
-      attachTooltip(fill,
-        '<div class="tt-title">' + r.trait + '</div>' +
-        '<div class="tt-row"><span>Percentile</span><strong>' + ordinal(r.percentile) + '</strong></div>' +
-        '<div class="tt-row"><span>Games</span><strong>' + r.games + '</strong></div>' +
-        '<div class="tt-row"><span>Reliability</span><strong>' + r.reliability.toFixed(2) + ' (' + r.confidence + ')</strong></div>');
-      track.appendChild(axis);
-      track.appendChild(fill);
-
-      var value = document.createElement('div');
-      value.className = 'divbar-value mono tabular';
-      value.textContent = ordinal(r.percentile);
-
-      var conf = document.createElement('div');
-      conf.className = 'conf';
-      conf.innerHTML = '<span class="dots">' + CONFIDENCE_DOTS[r.confidence] + '</span>' + r.confidence;
-
-      row.appendChild(label); row.appendChild(track); row.appendChild(value); row.appendChild(conf);
-      bars.appendChild(row);
+    var sd = {};
+    areas.forEach(function (a) { sd[a] = curves.hands[a] ? curves.hands[a].std : null; });
+    var effect = PM.championEffect(
+      games.map(function (g) { return (g.shape && g.shape.games) || {}; }),
+      games.map(function (g) { return (g.shape && g.shape.hands) || {}; }),
+      games.map(function (g) { return g.champion; }), sd, areas);
+    // Raw stats under each area: your average as played vs the tier's median player.
+    var statCurves = tierCurves(shape.stat_reference, filters) || {};
+    var stats = {};
+    areas.forEach(function (a) {
+      stats[a] = (shape.stats[a] || []).map(function (spec) {
+        var values = games.map(function (g) { return g.shape && g.shape.stats ? g.shape.stats[spec[0]] : null; })
+          .filter(function (v) { return v !== null && v !== undefined && !isNaN(v); });
+        var curve = statCurves[spec[0]];
+        return { feature: spec[0], label: spec[1], decimals: spec[2], signed: spec[3], percent: spec[4],
+                 you: values.length ? mean(values) : null, median: curve ? curve.median : null };
+      }).filter(function (st) { return st.you !== null && st.median !== null; });
     });
-    panel.appendChild(bars);
-
-    if (style.missing.length) {
-      var missing = document.createElement('div');
-      missing.className = 'muted-list';
-      missing.textContent = 'No data yet for: ' + style.missing.join(', ') +
-        (style.missing.indexOf('Early Trading') !== -1 ? ' (needs early-game timeline data).' : '.');
-      panel.appendChild(missing);
-    }
+    var target = filters.tier !== 'CHALLENGER' && views.hands.tiers.CHALLENGER ? 'CHALLENGER' : null;
+    return { state: 'ok', n: n, sample: PM.ownSampleStatus(n), areas: areas, views: views, effect: effect, stats: stats,
+             points: tierCurves(shape.points, filters) || [], pointsAreas: shape.points_areas, curves: curves, target: target };
   }
 
   // ---------- Champion pool (window applies; the champion filter doesn't) ----------
@@ -1277,25 +1289,27 @@
     art.style.backgroundImage = splash ? 'url(' + splash + ')' : '';
     hero.classList.toggle('has-art', !!splash);
 
-    var style = computeStyle(filters, champGames);
+    var s = computeShape(filters, champGames);
     var pool = computePool(filters, roleGames);
     var gaps = computeGaps(filters, champGames);
     var html = '';
 
-    if (style.state === 'ok') {
-      var fits = style.labels.filter(function (l) { return l[1] >= MIN_LABEL_MATCH; });
-      html += '<div><div class="hero-kicker">' + scopeLabelOf(filters) + ' · closest archetype</div>' +
-        '<div class="hero-name">' + (fits.length ? fits[0][0] : 'Mixed profile') + '</div>' +
-        '<div class="hero-match">' + (fits.length ? '<strong>' + Math.round(fits[0][1]) + '% match</strong>' : 'No archetype above ' + MIN_LABEL_MATCH + '% match') +
-        (fits[1] ? ' · next: ' + Math.round(fits[1][1]) + '% ' + fits[1][0] : '') + ' · vs ' + tierLabelOf(filters) + '</div></div>';
-      html += '<div class="hero-badges">' + style.rows.slice(0, 3).map(function (r) {
-        return '<span class="badge"><b>' + ordinal(r.percentile) + '</b>' + r.trait + '</span>';
+    if (s.state === 'ok') {
+      var h = s.views.hands.pct;
+      var label = PM.quadrantLabel(h.Damage, h.Survival);
+      html += '<div><div class="hero-kicker">' + scopeLabelOf(filters) + ' · on your champions, vs ' + tierLabelOf(filters) + '</div>' +
+        '<div class="hero-name">' + label + '</div>' +
+        '<div class="hero-match">Damage <strong>' + topText(h.Damage).toLowerCase() + '</strong> · Survival <strong>' +
+        topText(h.Survival).toLowerCase() + '</strong></div></div>';
+      var best = s.areas.filter(function (a) { return h[a] !== null; }).sort(function (a, b) { return h[b] - h[a]; }).slice(0, 3);
+      html += '<div class="hero-badges">' + best.map(function (a) {
+        return '<span class="badge"><b>' + topText(h[a]) + '</b>' + a + '</span>';
       }).join('') + '</div>';
     } else {
-      var why = style.state === 'all-roles' ? 'Pick a role to see your playstyle'
-        : style.state === 'few-games' ? 'Insufficient data (n=' + style.n + ' games)'
-        : 'Insufficient reference (n=' + style.refN + ')';
-      html += '<div><div class="hero-kicker">Closest archetype</div><div class="hero-name" style="font-size:26px;color:var(--ink-2)">' + why + '</div></div>';
+      var why = s.state === 'all-roles' ? 'Pick a role to see your shape'
+        : s.state === 'few-games' ? 'Insufficient data (n=' + s.n + ' games)'
+        : 'Insufficient reference (n=' + s.refN + ')';
+      html += '<div><div class="hero-kicker">Your shape</div><div class="hero-name" style="font-size:26px;color:var(--ink-2)">' + why + '</div></div>';
     }
 
     var stats = heroStats.slice();
@@ -1318,19 +1332,6 @@
     document.getElementById('hero-body').innerHTML = html;
   }
 
-  // ---------- Style map ----------
-  // Every reference player as a dot on two trait axes (percentiles within the selected tier),
-  // you highlighted, other tiers' median players as landmarks. Axes default to your two most
-  // distinctive traits; a pick sticks until the role changes.
-  var mapX = document.getElementById('map-x'), mapY = document.getElementById('map-y');
-  var mapPick = { role: null, x: null, y: null };
-  [mapX, mapY].forEach(function (el) {
-    el.addEventListener('change', function () {
-      mapPick = { role: roleSelect.value, x: mapX.value, y: mapY.value };
-      renderAll();
-    });
-  });
-
   function svgEl(tag, attrs, text) {
     var el = document.createElementNS('http://www.w3.org/2000/svg', tag);
     Object.keys(attrs).forEach(function (k) { el.setAttribute(k, attrs[k]); });
@@ -1338,163 +1339,304 @@
     return el;
   }
 
-  var mapResizeTimer = null, mapLastWidth = null;
+  // Charts are drawn at their real width (not scaled), so text stays readable on phones.
+  var chartResizeTimer = null, chartLastWidth = null;
   window.addEventListener('resize', function () {
-    clearTimeout(mapResizeTimer);
-    mapResizeTimer = setTimeout(function () {
-      var w = document.getElementById('style-map').clientWidth;
-      if (w !== mapLastWidth) renderAll();
+    clearTimeout(chartResizeTimer);
+    chartResizeTimer = setTimeout(function () {
+      var w = document.getElementById('risk-chart').clientWidth;
+      if (w !== chartLastWidth) renderAll();
     }, 200);
   });
 
-  function renderMap(filters, games) {
-    var box = document.getElementById('style-map');
-    var controls = document.querySelector('.map-controls');
-    document.getElementById('map-heading').textContent =
-      'Where you sit among ' + tierLabelOf(filters) + ' ' + roleLabel(filters.role) + ' players';
-    var style = computeStyle(filters, games);
-    var role = DATA.roles[filters.role];
-    var points = role && tierCurves(role.trait_points, filters);
-    if (style.state !== 'ok' || !points) {
-      controls.hidden = true;
-      document.getElementById('map-sub').textContent = '';
-      box.innerHTML = emptyState(style.state !== 'ok' ? stateMessage(style, filters, 'style map')
-        : stateMessage({ state: 'no-ref', refN: refCount(role.style_reference, filters) }, filters));
+  // ---------- Shape (hero chart) ----------
+  var shapeView = 'hands';
+  document.getElementById('shape-toggle').addEventListener('click', function (e) {
+    var view = e.target && e.target.getAttribute('data-view');
+    if (!view || view === shapeView) return;
+    shapeView = view;
+    renderShape(currentFilters(), computeShape(currentFilters(), filteredGames(currentFilters())));
+  });
+
+  function renderShape(filters, s) {
+    var box = document.getElementById('shape-chart'), capEl = document.getElementById('shape-cap');
+    var toggle = document.getElementById('shape-toggle');
+    document.getElementById('shape-heading').textContent = 'Your ' + scopeLabelOf(filters) + ' shape';
+    document.getElementById('shape-sub').innerHTML = 'Five areas of your game, as percentiles among ' + tierLabelOf(filters) + ' ' +
+      playersNoun(filters.role) + ' (10+ games each). The grey shape is a <b>typical ' + titleCase(filters.tier) +
+      ' player</b> (50th percentile everywhere): wherever yours breaks out of it, you beat most of your tier. ' +
+      '<b class="ink-games">Your games</b> = as played. <b class="ink-hands">Your hands</b> = compared with players on the same champions.';
+    if (s.state !== 'ok') {
+      toggle.hidden = true; capEl.textContent = '';
+      box.innerHTML = emptyState(stateMessage(s, filters, 'shape'));
       return;
     }
-    var axes = PM.defaultMapAxes(style.rows);
-    if (!axes) {
-      controls.hidden = true;
-      box.innerHTML = emptyState('Insufficient data: the map needs at least two traits with data.');
-      return;
+    toggle.hidden = false;
+    toggle.querySelectorAll('button').forEach(function (b) {
+      var on = b.getAttribute('data-view') === shapeView;
+      b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    var v = s.views[shapeView], areas = s.areas, col = shapeView === 'hands' ? 'var(--hands)' : 'var(--games)';
+    var W = Math.max(300, Math.min(560, box.clientWidth || 560));
+    var R = Math.max(78, Math.min(150, (W - (W < 420 ? 150 : 190)) / 2)), cx = W / 2, cy = R + 52, H = Math.round(2 * R + 112);
+    function pt(i, value) {
+      var a = -Math.PI / 2 + i * 2 * Math.PI / areas.length;
+      return [cx + Math.cos(a) * R * value / 100, cy + Math.sin(a) * R * value / 100];
     }
-    controls.hidden = false;
-    var curves = tierCurves(role.style_reference, filters);
-    var available = style.rows.map(function (r) { return r.trait; });
-    if (mapPick.role === filters.role && mapPick.x !== mapPick.y &&
-        available.indexOf(mapPick.x) !== -1 && available.indexOf(mapPick.y) !== -1) {
-      axes = [mapPick.x, mapPick.y];
-    }
-    var xT = axes[0], yT = axes[1];
-    [[mapX, xT], [mapY, yT]].forEach(function (pair) {
-      pair[0].innerHTML = '';
-      role.traits.filter(function (t) { return available.indexOf(t) !== -1; }).forEach(function (t) {
-        var o = document.createElement('option'); o.value = t; o.textContent = t; pair[0].appendChild(o);
-      });
-      pair[0].value = pair[1];
-    });
+    function poly(fn) { return areas.map(function (a, i) { return pt(i, fn(a)).join(','); }).join(' '); }
+    var you = function (a) { return v.pct[a] === null ? 0 : v.pct[a]; };
+    var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': 'Your shape (' + (shapeView === 'hands' ? 'your hands' : 'your games') + '): ' +
+      areas.map(function (a) { return a + ' ' + (v.pct[a] === null ? 'no data' : topText(v.pct[a]).toLowerCase()); }).join(', ') });
+    var defs = svgEl('defs', {});
+    var glow = svgEl('filter', { id: 'shape-glow', x: '-100%', y: '-100%', width: '300%', height: '300%' });
+    glow.appendChild(svgEl('feGaussianBlur', { stdDeviation: 5 }));
+    var grad = svgEl('radialGradient', { id: 'shape-fill', cx: cx, cy: cy, r: R, gradientUnits: 'userSpaceOnUse' });
+    grad.appendChild(svgEl('stop', { offset: '0%', 'stop-color': col, 'stop-opacity': .04 }));
+    grad.appendChild(svgEl('stop', { offset: '100%', 'stop-color': col, 'stop-opacity': .4 }));
+    defs.appendChild(glow); defs.appendChild(grad); svg.appendChild(defs);
 
-    var xi = role.traits.indexOf(xT), yi = role.traits.indexOf(yT);
-    var you = {};
-    style.rows.forEach(function (r) { you[r.trait] = r.percentile; });
+    [25, 75, 100].forEach(function (ring) { svg.appendChild(svgEl('polygon', { points: poly(function () { return ring; }), class: 'shape-grid' })); });
+    areas.forEach(function (a, i) { var p = pt(i, 100); svg.appendChild(svgEl('line', { x1: cx, y1: cy, x2: p[0], y2: p[1], class: 'shape-grid' })); });
+    svg.appendChild(svgEl('polygon', { points: poly(function () { return 50; }), class: 'shape-base' }));
+    svg.appendChild(svgEl('text', { x: cx, y: cy + 3, 'text-anchor': 'middle', class: 'shape-base-label' }, 'TYPICAL ' + (TIER_SHORT[filters.tier] === 'GM' ? 'GM' : filters.tier)));
+    svg.appendChild(svgEl('text', { x: cx, y: cy + 16, 'text-anchor': 'middle', class: 'shape-base-sub' }, '50th percentile'));
 
-    document.getElementById('map-sub').textContent =
-      'Each dot is one ' + tierLabelOf(filters) + ' ' + roleLabel(filters.role) + ' player (' + points.length +
-      ' players, 10+ games each), placed by two of their traits as percentiles within that tier. The axes start on your two most ' +
-      'distinctive traits; pick any pair. Diamonds mark the median player of the other tiers.';
-
-    // Drawn at the real width (not scaled), so text stays readable on phones.
-    var W = Math.max(300, Math.min(640, box.clientWidth || 640)), H = Math.round(W * 0.69);
-    var L = 54, R = W - 22, T = 18, B = H - 52;
-    function sx(p) { return L + (R - L) * p / 100; }
-    function sy(p) { return B - (B - T) * p / 100; }
-    var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img',
-      'aria-label': 'Style map: ' + xT + ' across, ' + yT + ' up. You: ' + ordinal(you[xT]) + ' and ' + ordinal(you[yT]) + '.' });
-    [0, 25, 75, 100].forEach(function (p) {
-      svg.appendChild(svgEl('line', { x1: sx(p), x2: sx(p), y1: T, y2: B, class: 'map-grid' }));
-      svg.appendChild(svgEl('line', { x1: L, x2: R, y1: sy(p), y2: sy(p), class: 'map-grid' }));
-    });
-    svg.appendChild(svgEl('line', { x1: sx(50), x2: sx(50), y1: T, y2: B, class: 'map-mid' }));
-    svg.appendChild(svgEl('line', { x1: L, x2: R, y1: sy(50), y2: sy(50), class: 'map-mid' }));
-    [0, 50, 100].forEach(function (p) {
-      svg.appendChild(svgEl('text', { x: sx(p), y: B + 16, 'text-anchor': 'middle', class: 'map-tick' }, p));
-      svg.appendChild(svgEl('text', { x: L - 8, y: sy(p) + 4, 'text-anchor': 'end', class: 'map-tick' }, p));
-    });
-    svg.appendChild(svgEl('text', { x: (L + R) / 2, y: H - 10, 'text-anchor': 'middle', class: 'map-axis' }, xT + ' percentile →'));
-    svg.appendChild(svgEl('text', { x: 0, y: 0, 'text-anchor': 'middle', class: 'map-axis',
-      transform: 'translate(16,' + (T + B) / 2 + ') rotate(-90)' }, yT + ' percentile →'));
-
-    // Archetype names lean the way their signature points on these two traits.
-    var placed = [];
-    Object.keys(role.archetypes).forEach(function (name) {
-      var sig = role.archetypes[name], wx = sig[xT] || 0, wy = sig[yT] || 0;
-      if (!wx && !wy) return;
-      var m = Math.max(Math.abs(wx), Math.abs(wy));
-      var px = 50 + 40 * wx / m, py = 50 + 40 * wy / m;
-      while (placed.some(function (q) { return Math.abs(q[0] - px) < 22 && Math.abs(q[1] - py) < 5; })) py -= 6;
-      placed.push([px, py]);
-      svg.appendChild(svgEl('text', { x: sx(px), y: sy(py), class: 'map-arch',
-        'text-anchor': px > 70 ? 'end' : px < 30 ? 'start' : 'middle' }, name));
-    });
-
-    points.forEach(function (p) {
-      if (p[xi] === null || p[yi] === null) return;
-      svg.appendChild(svgEl('circle', {
-        cx: sx(percentileFromBreakpoints(p[xi], curves[xT].breakpoints)),
-        cy: sy(percentileFromBreakpoints(p[yi], curves[yT].breakpoints)), r: 3.2, class: 'map-dot'
-      }));
-    });
-
-    var tierRef = role.style_reference[filters.region] || {};
-    var labelBoxes = [];  // [x0, y0, x1, y1] in SVG units, so tier labels never overlap
-    // Try right, left, below, above the marker; take the first spot that's free.
-    function placeLabel(x, y, text) {
-      var w = text.length * 6.6 + 4, h = 14;
-      var spots = [[x + 10, y + 4, 'start'], [x - 10, y + 4, 'end'], [x + 8, y + 20, 'start'],
-                   [x - 8, y + 20, 'end'], [x + 8, y - 10, 'start'], [x - 8, y - 10, 'end']];
-      function box(spot) {
-        var x0 = spot[2] === 'start' ? spot[0] : spot[0] - w;
-        return [x0, spot[1] - h + 3, x0 + w, spot[1] + 3];
+    var g = svgEl('g', { class: 'shape-you', style: 'transform-origin:' + cx + 'px ' + cy + 'px' });
+    g.appendChild(svgEl('polygon', { points: poly(you), fill: 'url(#shape-fill)', stroke: col, 'stroke-width': 2.5, 'stroke-linejoin': 'round' }));
+    areas.forEach(function (a, i) {
+      if (v.pct[a] === null) return;
+      var p = pt(i, v.pct[a]), elite = PM.topPct(v.pct[a]) <= 10;
+      if (elite) {
+        g.appendChild(svgEl('circle', { cx: p[0], cy: p[1], r: 13, fill: col, class: 'shape-glow', filter: 'url(#shape-glow)' }));
+        for (var k = -1; k <= 1; k++) {
+          var ang = -Math.PI / 2 + i * 2 * Math.PI / areas.length + k * 0.5;
+          g.appendChild(svgEl('line', { x1: p[0] + Math.cos(ang) * 9, y1: p[1] + Math.sin(ang) * 9, x2: p[0] + Math.cos(ang) * 17,
+            y2: p[1] + Math.sin(ang) * 17, stroke: col, 'stroke-width': 2.2, 'stroke-linecap': 'round' }));
+        }
       }
-      var free = spots.filter(function (spot) {
-        var b = box(spot);
-        return !labelBoxes.some(function (o) { return b[0] < o[2] && o[0] < b[2] && b[1] < o[3] && o[1] < b[3]; });
+      g.appendChild(svgEl('circle', { cx: p[0], cy: p[1], r: elite ? 6.5 : 4.5, fill: col, stroke: 'var(--surface)', 'stroke-width': 1.5 }));
+    });
+    svg.appendChild(g);
+
+    if (s.target) {
+      var tgt = v.tiers[s.target];
+      areas.forEach(function (a, i) {
+        if (tgt[a] === null) return;
+        var t = pt(i, tgt[a]);
+        svg.appendChild(svgEl('rect', { x: t[0] - 4.5, y: t[1] - 4.5, width: 9, height: 9, class: 'shape-target',
+          transform: 'rotate(45 ' + t[0] + ' ' + t[1] + ')' }));
       });
-      var chosen = free[0] || spots[0];
-      labelBoxes.push(box(chosen));
-      return chosen;
     }
-    var landmarks = (DATA.tiers || []).filter(function (t) {
-      var ref = tierRef[t];
-      return t !== filters.tier && ref && ref[xT] && ref[yT];
-    }).map(function (t) {
-      return { t: t, px: percentileFromBreakpoints(tierRef[t][xT].median, curves[xT].breakpoints),
-               py: percentileFromBreakpoints(tierRef[t][yT].median, curves[yT].breakpoints) };
+    areas.forEach(function (a, i) {
+      var lp = pt(i, 118), anchor = lp[0] > cx + 5 ? 'start' : lp[0] < cx - 5 ? 'end' : 'middle';
+      var dy = i === 0 ? -10 : 4, elite = v.pct[a] !== null && PM.topPct(v.pct[a]) <= 10;
+      svg.appendChild(svgEl('text', { x: lp[0], y: lp[1] + dy, 'text-anchor': anchor, class: 'shape-axis' }, a));
+      svg.appendChild(svgEl('text', { x: lp[0], y: lp[1] + dy + 17, 'text-anchor': anchor, class: 'shape-val' + (elite ? ' elite' : ''), fill: col },
+        v.pct[a] === null ? 'no data' : topText(v.pct[a])));
     });
-    // Reserve every marker's own spot first, so no label covers another tier's diamond.
-    landmarks.forEach(function (m) { labelBoxes.push([sx(m.px) - 8, sy(m.py) - 8, sx(m.px) + 8, sy(m.py) + 8]); });
-    landmarks.forEach(function (m) {
-      var t = m.t, px = m.px, py = m.py;
-      var g = svgEl('g', { tabindex: 0 });
-      g.appendChild(svgEl('path', { d: 'M' + sx(px) + ' ' + (sy(py) - 7) + ' l7 7 l-7 7 l-7 -7 z', class: 'map-landmark' }));
-      var spot = placeLabel(sx(px), sy(py), titleCase(t));
-      g.appendChild(svgEl('text', { x: spot[0], y: spot[1], 'text-anchor': spot[2], class: 'map-landmark-label' }, titleCase(t)));
-      attachTooltip(g, '<div class="tt-title">Median ' + titleCase(t) + ' ' + regionLabel(filters.region) + ' player</div>' +
-        '<div class="tt-row"><span>' + xT + '</span><strong>' + ordinal(px) + '</strong></div>' +
-        '<div class="tt-row"><span>' + yT + '</span><strong>' + ordinal(py) + '</strong></div>');
-      svg.appendChild(g);
-    });
-
-    var yx = sx(you[xT]), yy = sy(you[yT]);
-    var right = you[xT] > 85;
-    var me = svgEl('g', { tabindex: 0 });
-    me.appendChild(svgEl('circle', { cx: yx, cy: yy, r: 8, class: 'map-you-halo' }));
-    me.appendChild(svgEl('circle', { cx: yx, cy: yy, r: 8, class: 'map-you' }));
-    me.appendChild(svgEl('text', { x: yx + (right ? -13 : 13), y: yy - 10, 'text-anchor': right ? 'end' : 'start', class: 'map-you-label' }, 'You'));
-    attachTooltip(me, '<div class="tt-title">You · ' + filters.account + '</div>' +
-      '<div class="tt-row"><span>' + xT + '</span><strong>' + ordinal(you[xT]) + '</strong></div>' +
-      '<div class="tt-row"><span>' + yT + '</span><strong>' + ordinal(you[yT]) + '</strong></div>');
-    svg.appendChild(me);
-
     box.innerHTML = '';
     box.appendChild(svg);
-    mapLastWidth = box.clientWidth;
-    var note = document.createElement('p');
-    note.className = 'map-note';
-    note.textContent = 'Percentile axes spread the dots evenly along each one, so look at the shape: a diagonal band means the two traits ' +
-      'go together. Archetype names show which way each archetype leans on these two traits; they are directions, not borders ' +
-      '(the data has no clean clusters).';
-    box.appendChild(note);
+    var legend = document.createElement('div');
+    legend.className = 'shape-legend';
+    legend.innerHTML = '<span><i style="background:' + col + ';opacity:.6"></i>' + (shapeView === 'hands' ? 'Your hands' : 'Your games') + '</span>' +
+      '<span><i style="background:var(--ink-muted);opacity:.4"></i>Typical ' + titleCase(filters.tier) + '</span>' +
+      (s.target ? '<span><i style="background:var(--target);transform:rotate(45deg) scale(.75)"></i>Typical Challenger</span>' : '');
+    box.appendChild(legend);
+
+    var ranked = areas.filter(function (a) { return v.pct[a] !== null; }).sort(function (a, b) { return v.pct[b] - v.pct[a]; });
+    if (shapeView === 'hands' && ranked.length >= 3) {
+      var low = ranked[ranked.length - 1];
+      capEl.innerHTML = 'On the same champions you are <b>' + bandText(v.pct[ranked[0]]) + '</b> in ' + ranked[0] + ' and ' +
+        (PM.shapeBand(v.pct[ranked[1]]) === PM.shapeBand(v.pct[ranked[0]]) ? '' : bandText(v.pct[ranked[1]]) + ' in ') + ranked[1] +
+        '. ' + low + ' is your ' + (PM.shapeVerdict(v.pct[low]) === 'strength' ? 'least explosive area, still ' : 'lowest area, ') + bandText(v.pct[low]) + '.';
+    } else {
+      capEl.innerHTML = 'As played, champions included. Switch to <i>Your hands</i> to see what is you and what is your picks.';
+    }
+  }
+
+  // ---------- Area by area (dumbbells) ----------
+  var STRONG_LINES = [
+    function (b) { return 'You are ' + b + ' here on the same champions as everyone else. This one is you.'; },
+    function (b) { return 'Not your picks: players on your exact champions still land below you. ' + cap1(b) + '.'; },
+    function (b) { return 'Pure hands. Take the champions out of it and you are still ' + b + '.'; },
+    function (b) { return cap1(b) + ' on equal champions. Your picks are not carrying this.'; },
+    function (b) { return 'Same champions, same result: ' + b + '. That is your own play.'; }
+  ];
+  function areaSideNote(s, a) {
+    var e = s.effect[a];
+    if (!e || e.effect_sd === null || Math.abs(e.effect_sd) < 0.2 || !e.driver) return '';
+    var who = e.driver_share >= 0.5 ? champName(e.driver) : 'Your champion mix';
+    return ' <span class="side">' + who + (e.effect_sd > 0 ? ' adds a little on top.' : ' holds this back a bit.') + '</span>';
+  }
+  function areaNote(s, a, idx) {
+    var g = s.views.games.pct[a], h = s.views.hands.pct[a], e = s.effect[a];
+    if (g === null || h === null) return 'No data for this area in the selected games.';
+    if (PM.shapeVerdict(g) !== PM.shapeVerdict(h)) {
+      var who = e && e.driver && e.driver_share >= 0.5 ? champName(e.driver) : 'your champion mix';
+      return '<span class="area-tag champ">champ diff</span><br>As played you look ' + bandText(g) + ', but on the same champions you are ' +
+        bandText(h) + '. ' + (g > h ? cap1(who) + ' is doing a lot of the work.' : 'Your picks (' + who + ') are hiding it.');
+    }
+    var verdict = PM.shapeVerdict(h);
+    if (verdict === 'strength') return '<span class="area-tag hands">hands diff</span><br>' + STRONG_LINES[idx % STRONG_LINES.length](bandText(h)) + areaSideNote(s, a);
+    if (verdict === 'weakness') return '<span class="area-tag grow">room to grow</span><br>' + cap1(bandText(h)) + ' even on equal champions.' + areaSideNote(s, a);
+    return 'Right with your tier, champions or not.' + areaSideNote(s, a);
+  }
+  function fmtChip(st, v) {
+    var x = st.percent ? v * 100 : v;
+    var text = Math.abs(x) >= 1000 ? Math.round(x).toLocaleString() : x.toFixed(st.decimals);
+    return (st.signed && x > 0 ? '+' : '') + text + (st.percent ? '%' : '');
+  }
+
+  function renderAreas(filters, s) {
+    var panel = document.getElementById('areas-panel');
+    document.getElementById('areas-sub').innerHTML = 'Each row: <b class="ink-games">○ your games</b> → <b class="ink-hands">● your hands</b>, ' +
+      'as percentiles among ' + tierLabelOf(filters) + ' ' + playersNoun(filters.role) + '. Ticks mark the typical player of other tiers. ' +
+      '<i>Champ diff</i> means your champions change the verdict; <i>hands diff</i> means it holds up on equal champions.';
+    if (s.state !== 'ok') { panel.innerHTML = emptyState(stateMessage(s, filters, 'areas')); return; }
+    panel.innerHTML = '';
+    if (s.sample === 'low') {
+      var notice = document.createElement('div');
+      notice.className = 'notice';
+      notice.textContent = lowSampleNotice(s.n);
+      panel.appendChild(notice);
+    }
+    s.areas.forEach(function (a, idx) {
+      var g = s.views.games.pct[a], h = s.views.hands.pct[a];
+      var row = document.createElement('div');
+      row.className = 'area-row';
+      row.innerHTML = '<div><div class="area-name">' + a + '</div><div class="area-top">' + (h === null ? '—' : topText(h).toLowerCase()) + '</div></div>';
+      var box = document.createElement('div');
+      row.appendChild(box);
+      panel.appendChild(row);  // attached first so the bar can be drawn at its real width
+      var W = Math.max(240, Math.min(620, box.clientWidth || 560)), x = function (p) { return 14 + (W - 28) * p / 100; };
+      var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' 56', width: W, height: 56, role: 'img',
+        'aria-label': a + ': your games ' + (g === null ? 'no data' : ordinal(g)) + ', your hands ' + (h === null ? 'no data' : ordinal(h)) + ' percentile' });
+      svg.appendChild(svgEl('rect', { x: x(0), y: 32, width: x(100) - x(0), height: 6, rx: 3, class: 'db-track' }));
+      svg.appendChild(svgEl('line', { x1: x(50), x2: x(50), y1: 27, y2: 43, class: 'db-mid' }));
+      var ticks = Object.keys(s.views.hands.tiers).map(function (t) { return [t, s.views.hands.tiers[t][a]]; })
+        .filter(function (t) { return t[1] !== null; }).sort(function (p, q) { return p[1] - q[1]; });
+      var lastX = -99, level = 0;
+      ticks.forEach(function (t) {
+        var tx = x(t[1]), cls = t[0] === 'CHALLENGER' ? ' target' : '';
+        level = tx - lastX < 26 ? level + 1 : 0; lastX = tx;
+        svg.appendChild(svgEl('line', { x1: tx, x2: tx, y1: 28, y2: 42, class: 'db-tick' + cls }));
+        svg.appendChild(svgEl('text', { x: tx, y: 21 - level * 11, 'text-anchor': 'middle', class: 'db-tick-label' + cls }, TIER_SHORT[t[0]] || t[0]));
+      });
+      if (g !== null && h !== null) {
+        svg.appendChild(svgEl('line', { x1: x(g), x2: x(h), y1: 35, y2: 35, class: 'db-link' }));
+        svg.appendChild(svgEl('circle', { cx: x(g), cy: 35, r: 6, class: 'db-games' }));
+        svg.appendChild(svgEl('circle', { cx: x(h), cy: 35, r: 7, class: 'db-hands' }));
+      }
+      box.appendChild(svg);
+      var note = document.createElement('div');
+      note.className = 'area-note';
+      note.innerHTML = areaNote(s, a, idx);
+      row.appendChild(note);
+      row.appendChild(document.createElement('div'));
+      var chips = document.createElement('div');
+      chips.className = 'area-chips';
+      var lowerBetter = a === 'Survival';
+      chips.innerHTML = s.stats[a].map(function (st) {
+        var better = lowerBetter ? st.you < st.median : st.you > st.median;
+        return '<span class="area-chip">' + st.label + ' <b>' + fmtChip(st, st.you) + '</b> <span class="' + (better ? 'up' : 'down') + '">' +
+          (better ? '▲' : '▼') + '</span> ' + (TIER_SHORT[filters.tier] || titleCase(filters.tier)) + ' ' + fmtChip(st, st.median) + '</span>';
+      }).join('');
+      row.appendChild(chips);
+    });
+  }
+
+  // ---------- Risk for damage (quadrant) ----------
+  function renderRisk(filters, s) {
+    var box = document.getElementById('risk-chart'), noteEl = document.getElementById('risk-note');
+    document.getElementById('risk-sub').textContent = 'Dealing damage usually costs deaths. Each dot is one ' + tierLabelOf(filters) + ' ' +
+      playersNoun(filters.role).replace(/s$/, '') + ' (10+ games), placed by Damage and Survival on their own champions; diamonds are the typical player of other tiers. Up and to the right is better.';
+    if (s.state !== 'ok' || !s.points.length) {
+      noteEl.hidden = true;
+      box.innerHTML = emptyState(s.state !== 'ok' ? stateMessage(s, filters, 'risk chart')
+        : stateMessage({ state: 'no-ref', refN: 0 }, filters));
+      return;
+    }
+    noteEl.hidden = false;
+    var W = Math.max(300, Math.min(820, box.clientWidth || 820)), H = Math.round(W * (W < 500 ? 0.85 : 0.6));
+    var L = 50, R = W - 16, T = 14, B = H - 46;
+    function sx(p) { return L + (R - L) * p / 100; }
+    function sy(p) { return B - (B - T) * p / 100; }
+    var di = s.pointsAreas.indexOf('Damage'), si = s.pointsAreas.indexOf('Survival');
+    var dc = s.curves.hands.Damage.breakpoints, sc = s.curves.hands.Survival.breakpoints;
+    var h = s.views.hands.pct;
+    var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img',
+      'aria-label': 'Risk for damage: you are ' + PM.quadrantLabel(h.Damage, h.Survival) + ', damage ' + ordinal(h.Damage) + ', survival ' + ordinal(h.Survival) + ' percentile.' });
+    var defs = svgEl('defs', {}), lg = svgEl('linearGradient', { id: 'risk-wash', x1: '0', y1: '1', x2: '1', y2: '0' });
+    lg.appendChild(svgEl('stop', { offset: '0%', 'stop-color': 'var(--critical)', 'stop-opacity': .2 }));
+    lg.appendChild(svgEl('stop', { offset: '50%', 'stop-color': 'var(--target)', 'stop-opacity': .06 }));
+    lg.appendChild(svgEl('stop', { offset: '100%', 'stop-color': 'var(--good)', 'stop-opacity': .2 }));
+    defs.appendChild(lg); svg.appendChild(defs);
+    svg.appendChild(svgEl('rect', { x: sx(0), y: sy(100), width: sx(100) - sx(0), height: sy(0) - sy(100), fill: 'url(#risk-wash)', rx: 6 }));
+    [0, 25, 50, 75, 100].forEach(function (p) {
+      var cls = p === 50 ? 'risk-mid' : 'risk-grid';
+      svg.appendChild(svgEl('line', { x1: sx(p), x2: sx(p), y1: T, y2: B, class: cls }));
+      svg.appendChild(svgEl('line', { x1: L, x2: R, y1: sy(p), y2: sy(p), class: cls }));
+      var label = p === 0 ? '1st' : p === 100 ? '99th' : ordinal(p);
+      svg.appendChild(svgEl('text', { x: sx(p), y: B + 16, 'text-anchor': 'middle', class: 'risk-tick' }, label));
+      svg.appendChild(svgEl('text', { x: L - 7, y: sy(p) + 4, 'text-anchor': 'end', class: 'risk-tick' }, label));
+    });
+    svg.appendChild(svgEl('text', { x: (L + R) / 2, y: H - 8, 'text-anchor': 'middle', class: 'risk-axis' }, 'More damage →'));
+    svg.appendChild(svgEl('text', { x: 0, y: 0, 'text-anchor': 'middle', class: 'risk-axis', transform: 'translate(14,' + (T + B) / 2 + ') rotate(-90)' }, 'Dies less →'));
+    var narrow = W < 520;
+    [[narrow ? 'SAFE' : 'SAFE, LOW IMPACT', 1.5, 98.5, 'start', 'mid'], ['EFFICIENT CARRY', 98.5, 98.5, 'end', 'good'],
+     ['STRUGGLING', 1.5, 1.5, 'start', 'bad'], ['GLASS CANNON', 98.5, 1.5, 'end', 'mid']].forEach(function (q) {
+      svg.appendChild(svgEl('text', { x: sx(q[1]), y: sy(q[2]) + (q[2] > 50 ? 14 : -5), 'text-anchor': q[3], class: 'risk-corner ' + q[4] }, q[0]));
+    });
+    s.points.forEach(function (p) {
+      if (p[di] === null || p[si] === null) return;
+      svg.appendChild(svgEl('circle', { cx: sx(percentileFromBreakpoints(p[di], dc)), cy: sy(percentileFromBreakpoints(p[si], sc)), r: 3.2, class: 'risk-dot' }));
+    });
+    Object.keys(s.views.hands.tiers).forEach(function (t) {
+      var tv = s.views.hands.tiers[t];
+      if (tv.Damage === null || tv.Survival === null) return;
+      var cx = sx(tv.Damage), cy = sy(tv.Survival), cls = t === 'CHALLENGER' ? ' target' : '';
+      var gEl = svgEl('g', { tabindex: 0 });
+      gEl.appendChild(svgEl('rect', { x: cx - 6.5, y: cy - 6.5, width: 13, height: 13, transform: 'rotate(45 ' + cx + ' ' + cy + ')', class: 'risk-tier' + cls }));
+      gEl.appendChild(svgEl('text', { x: cx + 11, y: cy + 4, class: 'risk-tier-label' + cls }, 'Typical ' + titleCase(t)));
+      attachTooltip(gEl, '<div class="tt-title">Typical ' + titleCase(t) + ' ' + regionLabel(filters.region) + ' player</div>' +
+        '<div class="tt-row"><span>Damage</span><strong>' + ordinal(tv.Damage) + '</strong></div>' +
+        '<div class="tt-row"><span>Survival</span><strong>' + ordinal(tv.Survival) + '</strong></div>');
+      svg.appendChild(gEl);
+    });
+    if (h.Damage !== null && h.Survival !== null) {
+      var yx = sx(h.Damage), yy = sy(h.Survival), right = h.Damage > 80;
+      var me = svgEl('g', { tabindex: 0 });
+      me.appendChild(svgEl('circle', { cx: yx, cy: yy, r: 16, class: 'risk-you-halo' }));
+      me.appendChild(svgEl('circle', { cx: yx, cy: yy, r: 8, class: 'risk-you' }));
+      me.appendChild(svgEl('text', { x: yx + (right ? -20 : 20), y: yy + 5, 'text-anchor': right ? 'end' : 'start', class: 'risk-you-label' }, 'You'));
+      attachTooltip(me, '<div class="tt-title">You · ' + filters.account + '</div>' +
+        '<div class="tt-row"><span>Damage</span><strong>' + ordinal(h.Damage) + '</strong></div>' +
+        '<div class="tt-row"><span>Survival</span><strong>' + ordinal(h.Survival) + '</strong></div>');
+      svg.appendChild(me);
+    }
+    box.innerHTML = '';
+    box.appendChild(svg);
+    chartLastWidth = box.clientWidth;
+
+    var label = PM.quadrantLabel(h.Damage, h.Survival), noun = playersNoun(filters.role), tier = titleCase(filters.tier);
+    var dmg = Math.round(h.Damage), sur = Math.round(h.Survival), text, cls;
+    if (label === 'Efficient carry') {
+      cls = ''; text = 'On your champions you out-damage ' + dmg + '% of ' + tier + ' ' + noun + ' and die less than ' + sur + '% of them. ' +
+        'Most players buy damage with deaths; you are getting it at a discount.';
+    } else if (label === 'Glass cannon') {
+      cls = 'mid'; text = 'You out-damage ' + dmg + '% of ' + tier + ' ' + noun + ', but die more than ' + (100 - sur) + '% of them. ' +
+        'The damage is there; the deaths are the price. A death or two less per game is the fastest way up and to the right.';
+    } else if (label === 'Safe, low impact') {
+      cls = 'mid'; text = 'You die less than ' + sur + '% of ' + tier + ' ' + noun + ', but out-damage only ' + dmg + '% of them. ' +
+        'You are playing it safe: there is room to take more fights.';
+    } else {
+      cls = 'bad'; text = 'Below the typical ' + tier + ' player on both damage (' + ordinal(h.Damage) + ') and survival (' + ordinal(h.Survival) + '). ' +
+        'Pick one: dying less usually comes first, and damage follows from staying alive.';
+    }
+    var ch = s.target && s.views.hands.tiers[s.target];
+    if (ch && ch.Damage !== null && h.Damage >= ch.Damage && h.Survival >= ch.Survival) text += ' You are already past the typical Challenger player on both.';
+    noteEl.className = 'risk-note' + (cls ? ' ' + cls : '');
+    noteEl.innerHTML = '<b>' + label + '.</b> ' + text;
   }
 
   // ---------- vs. Pro ----------
@@ -1668,16 +1810,25 @@
     });
   }
 
+  // The games every profile section uses: window, then role, then champion.
+  function filteredGames(filters) {
+    var windowGames = windowedGames(filters);
+    var roleGames = filters.role === ALL_ROLES ? windowGames : windowGames.filter(function (g) { return g.role === filters.role; });
+    return filters.champion === 'ALL' ? roleGames : roleGames.filter(function (g) { return g.champion === filters.champion; });
+  }
+
   function renderAll() {
     var filters = currentFilters();
     var windowGames = windowedGames(filters);
     var roleGames = filters.role === ALL_ROLES ? windowGames : windowGames.filter(function (g) { return g.role === filters.role; });
-    var champGames = filters.champion === 'ALL' ? roleGames : roleGames.filter(function (g) { return g.champion === filters.champion; });
+    var champGames = filteredGames(filters);
 
     renderHeader(filters, windowGames, champGames);
     renderHero(filters, champGames, roleGames, windowGames);
-    renderStyle(filters, champGames);
-    renderMap(filters, champGames);
+    var shape = computeShape(filters, champGames);
+    renderShape(filters, shape);
+    renderAreas(filters, shape);
+    renderRisk(filters, shape);
     renderPool(filters, roleGames);
     renderPercentiles(filters, champGames);
     renderGaps(filters, champGames);

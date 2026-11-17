@@ -24,10 +24,9 @@ from dashboard_payload import (
     player_average_curves,
     pool_reference,
     reference_by_tier,
-    style_scores,
 )
 from feature_config import add_derived_features
-from playstyle_space import ROLE_EXCLUDED_TRAITS, TRAITS, add_game_state_columns
+from playstyle_space import add_game_state_columns
 
 
 def rows_for(players: dict[str, int], region="NA1", tier="CHALLENGER") -> pd.DataFrame:
@@ -90,32 +89,11 @@ def test_pool_reference():
     assert pool["n"] == 2
 
 
-# --- Style scores on real fixture games --------------------------------------------------------------
-
 @pytest.fixture(scope="module")
 def fixture_df():
     path = os.path.join(FIXTURES_DIR, "matches.ndjson")
     rows = build_feature_rows(path, info_by_puuid={}, min_game_length_seconds=300)
     return add_game_state_columns(add_derived_features(pd.DataFrame(rows)))
-
-
-def test_style_scores_shape(fixture_df):
-    role_df = fixture_df[fixture_df["teamPosition"] == "BOTTOM"].reset_index(drop=True)
-    scores, icc, traits = style_scores(role_df, "BOTTOM", champion_classes={}, min_reliability_games=2)
-    expected = [t for t, _ in TRAITS if t not in ROLE_EXCLUDED_TRAITS["BOTTOM"]]
-    assert traits == expected
-    assert list(scores.columns) == expected
-    assert scores.index.equals(role_df.index)
-    assert set(icc.index) == set(expected)
-
-
-def test_style_scores_without_timelines_use_end_of_game_features(fixture_df):
-    # No timeline columns in the table: traits that also have end-of-game features still
-    # get scores; Early Trading (timeline-only) is all missing.
-    role_df = fixture_df[fixture_df["teamPosition"] == "MIDDLE"].reset_index(drop=True)
-    scores, _, _ = style_scores(role_df, "MIDDLE", champion_classes={}, min_reliability_games=2)
-    assert scores["Lane Bully"].notna().all()
-    assert scores["Early Trading"].isna().all()
 
 
 # --- JSON safety ------------------------------------------------------------------------------------------
@@ -131,26 +109,26 @@ def test_json_number():
 # The map plots every qualifying reference player (10+ games) as their average trait scores,
 # in the role's trait order; the page turns them into percentiles with the tier's curves.
 
-from dashboard_payload import crop_splash, player_trait_points, splash_champions
+from dashboard_payload import crop_splash, player_points, splash_champions
 
 
-def test_player_trait_points_are_player_averages():
+def test_player_points_are_player_averages():
     rows = rows_for({"a": 10, "b": 12, "few": 3})
     # a: Lane Bully all 1.0, Duelist 0.0/2.0 alternating -> 1.0; b: 2.0 and 4.0; few: excluded
     scores = pd.DataFrame({
         "Lane Bully": [1.0] * 10 + [2.0] * 12 + [9.0] * 3,
         "Duelist": [0.0, 2.0] * 5 + [4.0] * 12 + [9.0] * 3,
     })
-    points = player_trait_points(rows, scores, ["Lane Bully", "Duelist"], ["NA1"], ["CHALLENGER"], min_players=2)
+    points = player_points(rows, scores, ["Lane Bully", "Duelist"], ["NA1"], ["CHALLENGER"], min_players=2)
     assert sorted(points["NA1"]["CHALLENGER"]) == [[1.0, 1.0], [2.0, 4.0]]
 
 
-def test_player_trait_points_missing_is_null_and_small_tiers_dropped():
+def test_player_points_missing_is_null_and_small_tiers_dropped():
     rows = rows_for({"a": 10, "b": 10})
     scores = pd.DataFrame({"Lane Bully": [np.nan] * 10 + [0.12345] * 10})
-    points = player_trait_points(rows, scores, ["Lane Bully"], ["NA1"], ["CHALLENGER"], min_players=2)
+    points = player_points(rows, scores, ["Lane Bully"], ["NA1"], ["CHALLENGER"], min_players=2)
     assert sorted(points["NA1"]["CHALLENGER"], key=str) == [[0.123], [None]]  # 3 decimals
-    assert player_trait_points(rows, scores, ["Lane Bully"], ["NA1"], ["CHALLENGER"], min_players=3) == {}
+    assert player_points(rows, scores, ["Lane Bully"], ["NA1"], ["CHALLENGER"], min_players=3) == {}
 
 
 # --- Player card splash art -----------------------------------------------------------------------
@@ -184,30 +162,46 @@ def test_crop_splash_shape_and_size():
 # champion-adjusted score mostly reflects which champions you play, so the trait is dropped,
 # as it already was for JUNGLE.
 
-from dashboard_payload import role_traits
-from playstyle_space import ROLE_ARCHETYPES
-from style_profile import soft_labels
+# --- Performance shape payload ---------------------------------------------------------------------
+# Per game: area scores in both views (the page averages them over the filtered games).
+# Per role: reference curves per view and tier, and anonymous Damage/Survival points per tier.
+
+from dashboard_payload import shape_payload
+from performance_shape import AREAS, add_shape_features
 
 
-@pytest.mark.parametrize("role", ["TOP", "JUNGLE", "MIDDLE", "BOTTOM"])
-def test_enchanter_only_for_support(role):
-    assert "Enchanter" not in [t for t, _ in role_traits(role)]
+def test_shape_payload_structure(fixture_df):
+    role_df = add_shape_features(fixture_df[fixture_df["teamPosition"] == "BOTTOM"].reset_index(drop=True))
+    payload, per_game = shape_payload(role_df, champion_classes={}, regions=["NA1"], tiers=["CHALLENGER"])
+    assert payload["areas"] == list(AREAS)
+    assert set(payload["reference"]) == {"games", "hands"}
+    assert "_player_counts" in payload["reference"]["hands"]
+    assert payload["points_areas"] == ["Damage", "Survival"]
+    # One entry per game in the role, both views, every area (None where undefined).
+    assert len(per_game) == len(role_df)
+    first = per_game[role_df.index[0]]
+    assert set(first) == {"games", "hands", "stats"}
+    assert set(first["hands"]) == set(AREAS)
+    assert all(v is None or isinstance(v, float) for v in first["games"].values())
 
 
-def test_enchanter_kept_for_support():
-    assert "Enchanter" in [t for t, _ in role_traits("UTILITY")]
+def test_shape_payload_without_timelines_still_scores_late_areas(fixture_df):
+    # The fixture has no timeline columns: Farming/Damage/Objectives come from end-of-game
+    # features; Laning and Survival keep their end-of-game features (lead, plates, deaths).
+    role_df = add_shape_features(fixture_df[fixture_df["teamPosition"] == "BOTTOM"].reset_index(drop=True))
+    _, per_game = shape_payload(role_df, champion_classes={}, regions=["NA1"], tiers=["CHALLENGER"])
+    assert all(game["hands"]["Damage"] is not None for game in per_game.values())
+    assert all(game["hands"]["Survival"] is not None for game in per_game.values())
 
 
-def test_archetypes_only_use_traits_their_role_has():
-    for role, archetypes in ROLE_ARCHETYPES.items():
-        available = {t for t, _ in role_traits(role)}
-        for name, signature in archetypes.items():
-            assert set(signature) <= available, f"{role} {name} uses {set(signature) - available}"
-
-
-def test_utility_mage_still_matches_on_cc_and_teamfighting():
-    traits = [t for t, _ in role_traits("BOTTOM")]
-    profile = pd.Series(0.0, index=traits)
-    profile[["Crowd Control", "Teamfighter"]] = [1.0, 0.5]
-    best = soft_labels(profile, "BOTTOM", ROLE_ARCHETYPES, top=1)[0]
-    assert best[0] == "Utility Mage" and best[1] > 90
+def test_shape_payload_carries_stat_chips(fixture_df):
+    from performance_shape import AREA_STATS
+    role_df = add_shape_features(fixture_df[fixture_df["teamPosition"] == "BOTTOM"].reset_index(drop=True))
+    payload, per_game = shape_payload(role_df, champion_classes={}, regions=["NA1"], tiers=["CHALLENGER"])
+    features = [s[0] for stats in AREA_STATS.values() for s in stats]
+    assert payload["stats"] == {area: [list(s) for s in stats] for area, stats in AREA_STATS.items()}
+    assert "_player_counts" in payload["stat_reference"]
+    first = per_game[role_df.index[0]]
+    # Timeline stats (CS diff @10, early deaths, ...) only when the table has them; the fixture doesn't.
+    assert set(first["stats"]) == {f for f in features if f in role_df.columns}
+    assert "deaths_per_game" in first["stats"]

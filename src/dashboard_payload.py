@@ -18,16 +18,7 @@ import numpy as np
 import pandas as pd
 
 from champion_pool import effective_champions, reference_class_mix
-from playstyle_space import ROLE_EXCLUDED_TRAITS, TRAITS, apply_outcome_adjuster, fit_outcome_adjuster
-from style_profile import (
-    apply_early_adjuster,
-    fit_early_adjuster,
-    fit_standardizer,
-    game_trait_scores,
-    single_game_reliability,
-    standardize,
-)
-from timeline_features import TIMELINE_FEATURE_COLUMNS
+from performance_shape import AREA_STATS, AREAS, STAT_FEATURES, VIEWS, fit_shape_model, game_area_scores
 
 BREAKPOINT_COUNT = 51  # percentile grid: 0, 2, 4, ..., 100
 MIN_PLAYER_GAMES = 10
@@ -125,45 +116,9 @@ def pool_reference(rows: pd.DataFrame, min_games: int = MIN_PLAYER_GAMES, min_pl
     }
 
 
-def role_traits(role: str) -> list[tuple[str, tuple[str, ...]]]:
-    excluded = ROLE_EXCLUDED_TRAITS.get(role, frozenset())
-    return [(trait, features) for trait, features in TRAITS if trait not in excluded]
+# ---------- Scatter points ----------
 
-
-def style_scores(
-    role_df: pd.DataFrame,
-    role: str,
-    champion_classes: dict[str, str],
-    min_reliability_games: int = MIN_PLAYER_GAMES,
-) -> tuple[pd.DataFrame, pd.Series, list[str]]:
-    """Per-game trait scores for one role's games, each trait's single-game reliability,
-    and the role's trait names (in TRAITS order).
-
-    End-of-game features: adjusted for teammates' lead, game length and champion.
-    Timeline features (if the table has them): adjusted for champion only, NaN kept.
-    Both are standardized against the role's whole population, then averaged per trait.
-    """
-    adjusted = apply_outcome_adjuster(role_df, fit_outcome_adjuster(role_df, champion_classes=champion_classes))
-    early = [c for c in TIMELINE_FEATURE_COLUMNS if c in role_df.columns]
-    if early:
-        early_adjuster = fit_early_adjuster(role_df, early, champion_classes)
-        adjusted = pd.concat([adjusted, apply_early_adjuster(role_df, early_adjuster)], axis=1)
-    z = standardize(adjusted, fit_standardizer(adjusted))
-
-    traits = role_traits(role)
-    names = [trait for trait, _ in traits]
-    # Traits with no available feature at all (Early Trading before timelines exist)
-    # come back as all-missing columns rather than disappearing.
-    scores = game_trait_scores(z, traits).reindex(columns=names)
-
-    keep = _eligible(role_df, min_reliability_games).to_numpy()
-    icc = single_game_reliability(scores[keep], role_df.loc[keep, "puuid"]).reindex(names)
-    return scores, icc, names
-
-
-# ---------- Style map ----------
-
-def player_trait_points(
+def player_points(
     rows: pd.DataFrame,
     scores: pd.DataFrame,
     traits: list[str],
@@ -193,6 +148,46 @@ def player_trait_points(
                 [json_number(v, 3) for v in row] for row in averages.to_numpy()
             ]
     return points
+
+
+# ---------- Performance shape ----------
+
+SHAPE_POINT_AREAS = ["Damage", "Survival"]  # the risk-for-damage quadrant
+
+
+def shape_payload(
+    role_df: pd.DataFrame,
+    champion_classes: dict[str, str],
+    regions: list[str],
+    tiers: list[str],
+) -> tuple[dict, dict]:
+    """(role-level shape payload, {row index: {"games": {area: score}, "hands": {...}}}).
+
+    role_df needs add_shape_features() applied. Both views are fitted on the role's whole
+    season population; the page averages your filtered games and ranks them against the
+    reference curves of the tier you pick.
+    """
+    model = fit_shape_model(role_df, champion_classes)
+    stat_columns = [c for c in STAT_FEATURES if c in role_df.columns]
+    scores = {view: game_area_scores(role_df, model, view) for view in VIEWS}
+    payload = {
+        "areas": list(AREAS),
+        "reference": {view: reference_by_tier(role_df, scores[view], regions, tiers) for view in VIEWS},
+        # Quadrant dots: every reference player's (Damage, Survival) averages, hands view.
+        "points_areas": SHAPE_POINT_AREAS,
+        "points": player_points(role_df, scores["hands"], SHAPE_POINT_AREAS, regions, tiers),
+        # Stat chips: raw values as played, compared with the tier's median player.
+        "stats": {area: [list(s) for s in stats] for area, stats in AREA_STATS.items()},
+        "stat_reference": reference_by_tier(role_df, role_df[stat_columns].astype(float), regions, tiers),
+    }
+    per_game = {
+        i: {
+            **{view: {area: json_number(scores[view].at[i, area]) for area in AREAS} for view in VIEWS},
+            "stats": {c: json_number(role_df.at[i, c]) for c in stat_columns},
+        }
+        for i in role_df.index
+    }
+    return payload, per_game
 
 
 # ---------- Player card splash art ----------

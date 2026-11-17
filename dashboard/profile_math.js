@@ -55,60 +55,18 @@
     return 100;
   }
 
-  // style_profile.player_profiles, for one player: mean of each trait over the games
-  // that have it, plus how many games that was.
-  function traitProfile(games, traits) {
+  // One player's average of each area over the games that have it, plus how many games
+  // that was (performance_shape.player_area_averages, for one player).
+  function areaProfile(games, areas) {
     var profile = {}, counts = {};
-    traits.forEach(function (trait) {
-      var values = games.map(function (g) { return g[trait]; }).filter(isNum);
-      counts[trait] = values.length;
-      profile[trait] = values.length ? mean(values) : null;
+    areas.forEach(function (area) {
+      var values = games.map(function (g) { return g[area]; }).filter(isNum);
+      counts[area] = values.length;
+      profile[area] = values.length ? mean(values) : null;
     });
     return { profile: profile, counts: counts };
   }
 
-  // playstyle_space._signature_match: cosine similarity between the profile and an
-  // archetype signature, using the norm of the *whole* profile.
-  function signatureMatch(profile, signature) {
-    var present = Object.keys(signature).filter(function (t) { return isNum(profile[t]); });
-    if (!present.length) return -1;
-    var dot = 0, sigNorm = 0;
-    present.forEach(function (t) {
-      dot += signature[t] * profile[t];
-      sigNorm += signature[t] * signature[t];
-    });
-    var fullNorm = 0;
-    Object.keys(profile).forEach(function (t) {
-      if (isNum(profile[t])) fullNorm += profile[t] * profile[t];
-    });
-    if (fullNorm === 0) return -1;
-    return dot / (Math.sqrt(sigNorm) * Math.sqrt(fullNorm));
-  }
-
-  // style_profile.soft_labels: top-N [archetype, match %], best first, clamped to 0-100.
-  function softLabels(profile, archetypes, top) {
-    var matches = Object.keys(archetypes).map(function (name) {
-      var pct = signatureMatch(profile, archetypes[name]) * 100;
-      return [name, Math.min(100, Math.max(0, pct))];
-    });
-    matches.sort(function (a, b) { return b[1] - a[1]; });
-    return matches.slice(0, top === undefined ? 2 : top);
-  }
-
-  // style_profile.profile_reliability (Spearman-Brown).
-  function profileReliability(singleGame, games) {
-    if (games <= 0 || !isNum(singleGame)) return 0;
-    return games * singleGame / (1 + (games - 1) * singleGame);
-  }
-
-  // style_profile.confidence_label.
-  function confidenceLabel(reliability) {
-    if (reliability >= 0.7) return 'high';
-    if (reliability >= 0.5) return 'medium';
-    return 'low';
-  }
-
-  // performance.own_sample_status.
   function ownSampleStatus(games) {
     if (games < 5) return 'insufficient';
     return games < 10 ? 'low' : 'ok';
@@ -181,32 +139,73 @@
     return { amount: diff, per_game: false };
   }
 
-  // Style map default axes: the two traits furthest from the 50th (your most distinctive),
-  // most distinctive first. rows = [{trait, percentile}]. null if fewer than two.
-  function defaultMapAxes(rows) {
-    var usable = rows.filter(function (r) { return isNum(r.percentile); });
-    if (usable.length < 2) return null;
-    usable = usable.slice().sort(function (a, b) {
-      return Math.abs(b.percentile - 50) - Math.abs(a.percentile - 50);
+  // ---------- Performance shape ----------
+  // How much a player's champions move each area (mirrors performance_shape.champion_effect).
+  // games/hands: per-game {area: score} in the two views, same order as champions.
+  // effect_sd: mean per-game (games - hands), in units of the reference players' spread
+  // (sd of player averages) -- SD rather than percentile points, which squeeze near 0/100.
+  // driver: champion pushing hardest in the direction of the total; driver_share can
+  // exceed 1 when other champions pull the other way.
+  function championEffect(games, hands, champions, sdByArea, areas) {
+    var out = {};
+    areas.forEach(function (area) {
+      var diffs = [], byChampion = {}, total = 0;
+      games.forEach(function (g, i) {
+        var a = g[area], b = hands[i][area];
+        if (!isNum(a) || !isNum(b)) return;
+        var d = a - b;
+        diffs.push(d); total += d;
+        byChampion[champions[i]] = (byChampion[champions[i]] || 0) + d;
+      });
+      var sd = sdByArea[area];
+      var effect = diffs.length && isNum(sd) && sd ? mean(diffs) / sd : null;
+      var driver = null, share = null;
+      if (diffs.length && total !== 0) {
+        var sign = total > 0 ? 1 : -1;
+        Object.keys(byChampion).forEach(function (c) {
+          if (driver === null || byChampion[c] * sign > byChampion[driver] * sign) driver = c;
+        });
+        share = byChampion[driver] * sign / Math.abs(total);
+      }
+      out[area] = { effect_sd: effect, driver: driver, driver_share: share };
     });
-    return [usable[0].trait, usable[1].trait];
+    return out;
+  }
+
+  // "Top X%" for a percentile, rounded once so the label, band and verdict always agree
+  // (89.8 is "top 10%" everywhere, never "top 10%" on the chart and "top 25%" in the text).
+  function topPct(percentile) { return Math.max(1, Math.round(100 - percentile)); }
+  function shapeBand(percentile) {
+    var t = topPct(percentile);
+    return t <= 10 ? 'top 10%' : t <= 25 ? 'top 25%' : t < 75 ? 'middle' : t < 90 ? 'bottom 25%' : 'bottom 10%';
+  }
+  // Callouts only call something champion-driven when the champions change this verdict.
+  function shapeVerdict(percentile) {
+    var t = topPct(percentile);
+    return t <= 25 ? 'strength' : t >= 75 ? 'weakness' : 'middle';
+  }
+  // Risk-for-damage quadrant (percentiles vs your comparison tier). The median player sits
+  // on the corner; ties count as up/right.
+  function quadrantLabel(damage, survival) {
+    var hiD = damage >= 50, hiS = survival >= 50;
+    return hiD && hiS ? 'Efficient carry' : hiS ? 'Safe, low impact' : hiD ? 'Glass cannon' : 'Struggling';
   }
 
   var ProfileMath = {
+    championEffect: championEffect,
+    topPct: topPct,
+    shapeBand: shapeBand,
+    shapeVerdict: shapeVerdict,
+    quadrantLabel: quadrantLabel,
     mean: mean,
     percentileFromBreakpoints: percentileFromBreakpoints,
-    traitProfile: traitProfile,
-    signatureMatch: signatureMatch,
-    softLabels: softLabels,
-    profileReliability: profileReliability,
-    confidenceLabel: confidenceLabel,
+    areaProfile: areaProfile,
     ownSampleStatus: ownSampleStatus,
     effectiveChampions: effectiveChampions,
     topChampion: topChampion,
     classMix: classMix,
     biggestGaps: biggestGaps,
-    gapSize: gapSize,
-    defaultMapAxes: defaultMapAxes
+    gapSize: gapSize
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = ProfileMath;

@@ -1,21 +1,17 @@
 """
-Shared "playstyle space" transform: outcome-adjusted features -> scaler -> PCA.
+Game-context adjustment, shared by the performance shape and the performance gaps.
 
-Why outcome adjustment: almost every per-minute stat (damage, gold, KDA, kills,
-objective damage, ...) scales with *how the game went*, not just *how the player
-plays*. Clustering those raw stats sorts games into "got stomped / normal / stomping"
-(cluster win rates of ~15% / ~60% / ~90%) rather than into playstyles.
+Almost every per-minute stat (damage, gold, CS, deaths, ...) moves with *how the game
+went* and with game length, not just with how the player played. Per role, each feature is
+regressed on game context -- the teammates' kill and gold lead (your 4 teammates vs the 4
+enemies other than your lane opponent), a cubic spline of game length, and optionally the
+champion played -- and the residual is put back on the feature's own scale at a "typical
+game" (even teammates, median length, the role's average champion mix).
 
-Fix: per role, regress every clustering feature on game-context covariates (win flag,
-team kill differential per minute, team gold differential per minute, and a spline of
-game length) and cluster the residuals -- i.e. "how this game's stats differ from what
-a game with this outcome and length typically looks like for this role". The fitted regression is stored in the role's
-model artifact so every consumer (build_clusters, compare_self, export_dashboard_data)
-projects rows identically.
+Your own lead stays in on purpose: team lead = teammates' lead + your own lane lead, and
+only the teammates' part is outside your control.
 
-The raw feature columns are untouched in the feature table -- percentile comparisons
-against a reference tier still use raw values, which is what you want there (being
-ahead *is* the point of e.g. gold/min percentiles).
+Raw feature columns are untouched in the feature table.
 """
 
 from __future__ import annotations
@@ -38,20 +34,17 @@ LANE_STATE_COLUMNS = ("lane_kill_diff_per_min", "lane_gold_diff_per_min")
 TEAMMATE_STATE_COLUMNS = ("teammates_kill_diff_per_min", "teammates_gold_diff_per_min")
 GAME_STATE_COLUMNS = TEAM_STATE_COLUMNS + LANE_STATE_COLUMNS + TEAMMATE_STATE_COLUMNS
 STATE_COLUMNS = TEAMMATE_STATE_COLUMNS
-# Covariates used by models fitted before the teammates-only change (win flag + full team
-# lead). Kept so older saved artifacts still apply.
-LEGACY_STATE_COLUMNS = ("win",) + TEAM_STATE_COLUMNS
 # Game length enters the adjustment as a cubic spline (see fit_outcome_adjuster).
 LENGTH_SPLINE_KNOTS = 6
 # Champions with fewer games than this in a role share one adjustment with the rest of
 # their class (see champion_groups) -- too few games to estimate their own typical stats.
 MIN_CHAMPION_GAMES = 30
 
-# Exact or near-exact duplicates of another clustering feature (Riot's precomputed
-# per-minute value vs. our own division of the same total). Kept in the feature table
-# for the percentile charts, but excluded from clustering so they don't double-weight
-# one dimension.
-CLUSTERING_EXCLUDED_DUPLICATES = frozenset(
+# Exact or near-exact duplicates of another feature (Riot's precomputed per-minute value
+# vs. our own division of the same total), and kill-count features that mostly restate
+# "got kills". Left out of the default adjustment set so a fit doesn't double-weight them;
+# they stay in the feature table for percentile comparisons.
+DUPLICATE_FEATURES = frozenset(
     {
         "gold_per_minute",  # == gold_earned_per_min
         "damage_to_champions_per_min",  # == damage_per_minute
@@ -60,16 +53,12 @@ CLUSTERING_EXCLUDED_DUPLICATES = frozenset(
     }
 )
 
-# Kill-count features that mostly restate "got kills" (and depend heavily on how the game
-# went). kills_per_min and solo_kills stay as the style profile's kill dimension; these
-# remain in the feature table for percentile comparisons.
-STYLE_EXCLUDED_REDUNDANT = frozenset(
+REDUNDANT_KILL_FEATURES = frozenset(
     {"kda", "killing_sprees", "largest_killing_spree", "largest_multikill", "multikills"}
 )
 
-CLUSTER_FEATURE_COLUMNS = [
-    c for c in FEATURE_COLUMN_NAMES if c not in CLUSTERING_EXCLUDED_DUPLICATES | STYLE_EXCLUDED_REDUNDANT
-]
+# Default feature set for fit_outcome_adjuster (callers normally pass their own).
+DEFAULT_FEATURE_COLUMNS = [c for c in FEATURE_COLUMN_NAMES if c not in DUPLICATE_FEATURES | REDUNDANT_KILL_FEATURES]
 
 
 def add_game_state_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -177,16 +166,16 @@ def fit_outcome_adjuster(
     sprees, turret plates, max lane leads etc. are per-game totals/maxima that grow with
     length -- non-linearly (champion level follows the XP curve and caps at 18) -- and
     even per-minute rates like gold/min drift with it. Without this, the shortest games
-    formed their own "low everything" cluster.
+    looked uniformly "low everything".
 
     With champion_classes, the champion played is a covariate too (one indicator per
     champion, rare champions pooled by class), so residuals mean "how this game differs
     from a typical game *on the same champion*" -- otherwise playstyle mostly reduces to
     which champion was picked (Malphite always "tanks more" than Jinx).
 
-    feature_columns defaults to the clustering features; the performance view passes its own.
+    feature_columns defaults to DEFAULT_FEATURE_COLUMNS; the shape and gaps pass their own.
     """
-    columns = list(feature_columns) if feature_columns is not None else list(CLUSTER_FEATURE_COLUMNS)
+    columns = list(feature_columns) if feature_columns is not None else list(DEFAULT_FEATURE_COLUMNS)
     medians = role_df[columns].astype(float).median()
     features = role_df[columns].astype(float).fillna(medians)
     minutes = _game_minutes(role_df)
@@ -235,8 +224,7 @@ def apply_outcome_adjuster(rows: pd.DataFrame, adjuster: dict) -> pd.DataFrame:
     an even, median-length game".
     """
     columns = adjuster["feature_columns"]
-    # Artifacts saved before the teammates-only change have no "state_columns".
-    state_columns = adjuster.get("state_columns", LEGACY_STATE_COLUMNS)
+    state_columns = adjuster["state_columns"]
     features = rows[columns].fillna(adjuster["feature_medians"])
     regression: LinearRegression = adjuster["regression"]
     length_spline: SplineTransformer = adjuster["length_spline"]
@@ -246,236 +234,9 @@ def apply_outcome_adjuster(rows: pd.DataFrame, adjuster: dict) -> pd.DataFrame:
         np.array([[adjuster["median_game_minutes"]]]),
         length_spline,
     )
-    if "champion_group_levels" in adjuster:  # models fitted before champion adjustment lack this
+    if "champion_group_levels" in adjuster:  # fitted without champion_classes: no champion terms
         covariates = np.hstack([covariates, _champion_onehot(rows["championName"], adjuster)])
         typical = np.hstack([typical, adjuster["champion_group_shares"].reshape(1, -1)])
     predicted = regression.predict(covariates)
     adjusted = features.to_numpy() - predicted + regression.predict(typical)
     return pd.DataFrame(adjusted, columns=columns, index=rows.index)
-
-
-def to_playstyle_space(rows: pd.DataFrame, artifact: dict) -> np.ndarray:
-    """rows -> outcome-adjusted -> scaled -> PCA coords, using a role's fitted artifact."""
-    # Game-state columns must be computed on the *full* feature table (they need all
-    # 10 participants of a match), so a subset like "just my games" can't derive them.
-    missing = [c for c in GAME_STATE_COLUMNS if c not in rows.columns]
-    if missing:
-        raise ValueError(
-            f"Rows are missing game-state columns {missing}; call add_game_state_columns() "
-            "on the full feature table before selecting a subset."
-        )
-    adjusted = apply_outcome_adjuster(rows, artifact["outcome_adjuster"])
-    scaled = artifact["scaler"].transform(adjusted)
-    return artifact["pca"].transform(scaled)
-
-
-# ---------- Cluster naming ----------
-#
-# Clusters used to be named by win-rate rank ("Passive & Behind" ... "Dominant Carry").
-# With outcome removed they're named by what they actually do: each trait is the mean
-# standardized (outcome-adjusted) centroid value over a small group of features, and a
-# cluster is named after its two strongest traits.
-
-TRAITS: list[tuple[str, tuple[str, ...]]] = [
-    ("Frontline", ("damage_taken_per_min", "damage_self_mitigated_per_min", "damage_taken_on_team_pct")),
-    ("Crowd Control", ("cc_time_per_min",)),
-    ("Damage Carry", ("damage_per_minute", "team_damage_pct")),
-    ("Enchanter", ("heal_on_teammates_per_min", "shield_on_teammates_per_min")),
-    ("Vision Control", (
-        "vision_score_per_minute", "wards_placed_per_min", "wards_killed_per_min", "control_wards_per_min",
-        "early_wards_placed", "early_wards_killed", "early_control_wards",
-    )),
-    ("Farm-Focused", ("cs_per_min", "lane_minions_first_10", "gold_earned_per_min")),
-    ("Lane Bully", (
-        "max_cs_advantage_lane_opp", "max_level_lead_lane_opp", "turret_plates_taken", "lane_gold_diff_per_min",
-        "cs_diff_at_10", "gold_diff_at_14", "xp_diff_at_14",
-    )),
-    ("Duelist", ("solo_kills", "kills_per_min", "early_solo_kills")),
-    ("Teamfighter", ("kill_participation", "assists_per_min", "early_kill_participation")),
-    # Own building damage only: turret takedown counts mostly track whether the team won.
-    ("Split-Pusher", ("damage_to_buildings_per_min",)),
-    # No "Objective Control" trait: objective damage duplicates building damage for laners
-    # (it includes towers), the epic-objective share is mostly game-to-game noise, and
-    # junglers sit at 100% of it in most games. Objective participation is a performance
-    # gap stat instead (performance.GAP_FEATURES).
-    ("Jungle Farmer", ("neutral_cs_per_min",)),
-    ("Skillshot Mage", ("skillshots_hit_per_min", "ability_uses_per_min")),
-    # Named for what it measures: deaths carry no built-in payoff, so "High-Risk" overstated it.
-    ("Death-Prone", ("deaths_per_min", "early_deaths")),
-    # Trading in lane before 14:00 (damage dealt and absorbed), vs. farming passively.
-    ("Early Trading", ("damage_to_champions_at_14", "damage_taken_at_14")),
-    # Share of the team's gold: "the team plays through me" vs. "I play off the team".
-    ("Resource Priority", ("team_gold_share",)),
-]
-
-# Traits that read as nonsense for a role (e.g. "Jungle Farmer" for a bot laner whose
-# adjusted neutral CS is merely above the near-zero role average).
-# Enchanter outside support: heals/shields on teammates are zero in 86-94% of TOP/MIDDLE/BOTTOM
-# games, mostly on champions that never do it, so the champion-adjusted score there mostly
-# reflects champion mix, not play (checked 2026-11-13, season 16).
-ROLE_EXCLUDED_TRAITS: dict[str, frozenset[str]] = {
-    "TOP": frozenset({"Jungle Farmer", "Enchanter"}),
-    "JUNGLE": frozenset({"Farm-Focused", "Lane Bully", "Enchanter"}),
-    "MIDDLE": frozenset({"Jungle Farmer", "Enchanter"}),
-    "BOTTOM": frozenset({"Jungle Farmer", "Enchanter"}),
-    "UTILITY": frozenset({"Jungle Farmer", "Farm-Focused", "Lane Bully"}),
-}
-
-# Below this, a cluster's strongest trait isn't really distinctive.
-MIN_TRAIT_SCORE = 0.15
-LOW_PROFILE_NAME = "Low-Profile"
-
-
-def trait_scores(centroid_z: pd.Series, role: str | None = None) -> pd.Series:
-    excluded = ROLE_EXCLUDED_TRAITS.get(role, frozenset()) if role else frozenset()
-    scores = {}
-    for trait, features in TRAITS:
-        if trait in excluded:
-            continue
-        present = [f for f in features if f in centroid_z.index]
-        if present:
-            scores[trait] = float(centroid_z[present].mean())
-    return pd.Series(scores).sort_values(ascending=False)
-
-
-# Plain-language phrasing of each trait for card descriptions ("More X; less Y").
-TRAIT_PHRASES: dict[str, str] = {
-    "Frontline": "damage absorbed",
-    "Crowd Control": "crowd control",
-    "Damage Carry": "damage output",
-    "Enchanter": "heals & shields",
-    "Vision Control": "vision",
-    "Farm-Focused": "farming",
-    "Lane Bully": "lane leads",
-    "Duelist": "kills & solo kills",
-    "Teamfighter": "kill participation",
-    "Split-Pusher": "tower damage",
-    "Jungle Farmer": "jungle camps",
-    "Skillshot Mage": "ability usage",
-    "Death-Prone": "deaths",
-    "Early Trading": "early trading",
-    "Resource Priority": "gold share",
-}
-
-# Role-specific named archetypes, each defined by a trait signature (+ = more of the
-# trait, - = less). A cluster takes the archetype whose signature best matches its trait
-# profile; generic trait-pair names are only a fallback. This keeps names meaningful
-# for the role (an ADC who absorbs damage and dies more is a "skirmisher", not a
-# "frontline") and stable across the dashboard's k = 3-6 refits.
-ROLE_ARCHETYPES: dict[str, dict[str, dict[str, float]]] = {
-    "BOTTOM": {
-        "Hyper-Carry": {"Damage Carry": 1, "Duelist": 1, "Split-Pusher": 0.5},
-        "Safe Farmer": {"Farm-Focused": 1, "Lane Bully": 0.7, "Death-Prone": -1, "Frontline": -0.7},
-        "Aggressive Skirmisher": {"Death-Prone": 1, "Frontline": 1, "Duelist": 0.4, "Farm-Focused": -0.5},
-        "Vision-Focused Carry": {"Vision Control": 1, "Farm-Focused": 0.4},
-        "Low-Resource": {"Damage Carry": -1, "Farm-Focused": -1, "Duelist": -0.5},
-        "Utility Mage": {"Crowd Control": 1, "Teamfighter": 0.5},  # no Enchanter in BOTTOM
-        "Ability-Heavy Carry": {"Skillshot Mage": 1.5},
-    },
-    "TOP": {
-        "Carry Duelist": {"Duelist": 1, "Damage Carry": 1, "Lane Bully": 0.5},
-        "Tank / Frontline": {"Frontline": 1, "Crowd Control": 0.8, "Teamfighter": 0.5, "Damage Carry": -0.5},
-        "Lane Farmer": {"Farm-Focused": 1, "Lane Bully": 0.7, "Death-Prone": -0.7},
-        "Split-Pusher": {"Split-Pusher": 1, "Teamfighter": -0.7},
-        "Low-Resource": {"Damage Carry": -1, "Farm-Focused": -1},
-        "Vision-Focused": {"Vision Control": 1},
-    },
-    "JUNGLE": {
-        "Carry Jungler": {"Damage Carry": 1, "Duelist": 1},
-        "Tank / Engage": {"Frontline": 1, "Crowd Control": 0.8, "Teamfighter": 0.6},
-        "Farming Jungler": {"Jungle Farmer": 1, "Death-Prone": -0.6, "Frontline": -0.4},
-        "Vision / Enabler": {"Vision Control": 1, "Teamfighter": 0.6},
-        "Ranged / Poke Jungler": {"Skillshot Mage": 1, "Vision Control": 0.6},
-        "Low-Resource": {"Damage Carry": -1, "Jungle Farmer": -1},
-    },
-    "MIDDLE": {
-        "Assassin / Carry": {"Duelist": 1, "Damage Carry": 1},
-        "Control Mage": {"Vision Control": 0.8, "Crowd Control": 0.8, "Farm-Focused": 0.6, "Death-Prone": -0.7},
-        "Lane-Dominant Carry": {"Lane Bully": 1, "Farm-Focused": 0.7, "Split-Pusher": 0.5},
-        "Frontline Skirmisher": {"Frontline": 1, "Death-Prone": 0.7},
-        "Roaming Playmaker": {"Teamfighter": 1, "Crowd Control": 0.5, "Farm-Focused": -0.5},
-        "Scaling Farmer": {"Farm-Focused": 1, "Lane Bully": 0.5, "Teamfighter": -0.5},
-        "Low-Resource": {"Damage Carry": -1, "Farm-Focused": -1},
-    },
-    "UTILITY": {
-        "Damage Support": {"Damage Carry": 1, "Duelist": 0.8},
-        "Enchanter": {"Enchanter": 1, "Frontline": -0.6},
-        "Engage Tank": {"Frontline": 1, "Crowd Control": 0.8, "Vision Control": 0.4},
-        "Vision Support": {"Vision Control": 1},
-        "Mage / Poke Support": {"Damage Carry": 0.8, "Split-Pusher": 0.6, "Skillshot Mage": 0.6, "Duelist": -0.3},
-        "Low-Resource": {"Vision Control": -1, "Damage Carry": -0.5, "Enchanter": -0.5},
-    },
-}
-# Minimum signature match (cosine similarity) for an archetype name to apply.
-MIN_ARCHETYPE_MATCH = 0.45
-
-
-def _signature_match(scores: pd.Series, signature: dict[str, float]) -> float:
-    traits = [t for t in signature if t in scores.index]
-    if not traits:
-        return -1.0
-    sig = np.array([signature[t] for t in traits])
-    vec = scores.reindex(traits).to_numpy()
-    # Cosine against the full trait vector, so a cluster that's extreme on traits the
-    # signature doesn't mention matches less well.
-    full_norm = np.linalg.norm(scores.to_numpy())
-    if full_norm == 0:
-        return -1.0
-    return float(sig @ vec / (np.linalg.norm(sig) * full_norm))
-
-
-def _fallback_name(scores: pd.Series) -> str:
-    positive = [t for t, s in scores.items() if s >= MIN_TRAIT_SCORE]
-    if not positive:
-        return LOW_PROFILE_NAME
-    return " · ".join(positive[:2])
-
-
-def name_clusters(
-    adjusted_scaled: np.ndarray,
-    labels: np.ndarray,
-    feature_columns: list[str],
-    role: str | None = None,
-) -> dict[int, dict]:
-    """Return {cluster_id: {"name", "traits", "low_traits"}} from standardized adjusted features.
-
-    Clusters are matched to the role's named archetypes greedily, best (cluster,
-    archetype) match first, each archetype used at most once; clusters left without a
-    good match fall back to their top-two trait names. "traits"/"low_traits" are plain
-    phrases (TRAIT_PHRASES) for the card description.
-    """
-    frame = pd.DataFrame(adjusted_scaled, columns=feature_columns)
-    centroids = frame.groupby(labels).mean()
-    scores_by_cluster = {int(c): trait_scores(centroids.loc[c], role) for c in centroids.index}
-
-    archetypes = ROLE_ARCHETYPES.get(role, {}) if role else {}
-    candidates = sorted(
-        (
-            (_signature_match(scores, signature), cluster_id, name)
-            for cluster_id, scores in scores_by_cluster.items()
-            for name, signature in archetypes.items()
-        ),
-        reverse=True,
-    )
-    names: dict[int, str] = {}
-    used: set[str] = set()
-    for match, cluster_id, name in candidates:
-        if match < MIN_ARCHETYPE_MATCH:
-            break
-        if cluster_id in names or name in used:
-            continue
-        names[cluster_id] = name
-        used.add(name)
-
-    result: dict[int, dict] = {}
-    for cluster_id, scores in scores_by_cluster.items():
-        name = names.get(cluster_id) or _fallback_name(scores)
-        base, suffix = name, 2
-        while name in used and names.get(cluster_id) != name:
-            name = f"{base} ({suffix})"
-            suffix += 1
-        used.add(name)
-        positive = [TRAIT_PHRASES[t] for t, s in scores.items() if s >= MIN_TRAIT_SCORE][:3]
-        low = [TRAIT_PHRASES[t] for t, s in scores.sort_values().items() if s <= -MIN_TRAIT_SCORE][:2]
-        result[cluster_id] = {"name": name, "traits": positive, "low_traits": low}
-    return result

@@ -7,7 +7,7 @@ Phase 1b tests: adjust for what's outside the player's control, not for their ow
   in the features as style.
 - New features: team_gold_share (your gold / team gold) and lane_gold_diff_per_min
   (your gold minus your lane opponent's, per minute).
-- Redundant kill features are trimmed from the style profile (kept for percentiles).
+- Redundant kill features are left out of the default adjustment set (kept for percentiles).
 """
 
 import json
@@ -21,7 +21,7 @@ from conftest import FIXTURES_DIR
 from build_features import build_feature_rows
 from feature_config import FEATURE_COLUMN_NAMES, add_derived_features, add_team_context_features
 from playstyle_space import (
-    CLUSTER_FEATURE_COLUMNS,
+    DEFAULT_FEATURE_COLUMNS,
     add_game_state_columns,
     apply_outcome_adjuster,
     fit_outcome_adjuster,
@@ -113,7 +113,7 @@ def synthetic_role_df(seed: int = 0, n: int = 4000) -> pd.DataFrame:
             "team_gold_diff_per_min": teammates_lead + own_lead,
             "team_kill_diff_per_min": (teammates_lead + own_lead) / 300,
         }
-        for column in CLUSTER_FEATURE_COLUMNS:
+        for column in DEFAULT_FEATURE_COLUMNS:
             row[column] = float(rng.normal(1.0, 0.1))
         row[FEATURE] = 700 + (150 if carry else 0) + 1.0 * teammates_lead + rng.normal(0, 60)
         rows.append(row)
@@ -142,34 +142,9 @@ def test_win_flag_is_not_a_covariate():
     assert "win" not in adjuster["covariates"]
 
 
-def test_legacy_artifacts_still_apply():
-    # Artifacts saved before this change used win + team-wide leads; they must still load.
-    df = synthetic_role_df()
-    adjuster = fit_outcome_adjuster(df)
-    legacy = dict(adjuster)
-    legacy.pop("state_columns")
-    from sklearn.linear_model import LinearRegression
+# --- Default feature set ----------------------------------------------------------------------
 
-    from playstyle_space import LEGACY_STATE_COLUMNS, _row_covariates
-
-    legacy["regression"] = LinearRegression().fit(
-        _row_covariates(df, adjuster["length_spline"], LEGACY_STATE_COLUMNS), df[CLUSTER_FEATURE_COLUMNS]
-    )
-    out = apply_outcome_adjuster(df.head(5), legacy)
-    assert out[FEATURE].notna().all()
-
-
-# --- Kill-feature trim ----------------------------------------------------------------------------
-
-TRIMMED = ["kda", "killing_sprees", "largest_killing_spree", "largest_multikill", "multikills"]
-
-
-@pytest.mark.parametrize("feature", TRIMMED)
-def test_redundant_kill_features_out_of_style_profile(feature):
-    assert feature not in CLUSTER_FEATURE_COLUMNS
+@pytest.mark.parametrize("feature", ["kda", "killing_sprees", "largest_killing_spree", "largest_multikill", "multikills"])
+def test_redundant_kill_features_not_in_default_set(feature):
+    assert feature not in DEFAULT_FEATURE_COLUMNS
     assert feature in FEATURE_COLUMN_NAMES  # still available for percentiles
-
-
-@pytest.mark.parametrize("feature", ["kills_per_min", "solo_kills", "team_gold_share", "lane_gold_diff_per_min"])
-def test_kept_and_new_features_in_style_profile(feature):
-    assert feature in CLUSTER_FEATURE_COLUMNS

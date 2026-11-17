@@ -1,5 +1,5 @@
 """
-Build a per-participant feature table for playstyle clustering.
+Build the per-participant feature table (one row per player per match).
 
 Reads data/raw/matches.ndjson (via pipeline_io) plus any data/raw/league_entries*.json
 pool files (to attach a source tier per puuid where known), applies the curated
@@ -269,8 +269,8 @@ def run(args: argparse.Namespace) -> None:
     print(f"Loaded tier/region lookup for {len(info_by_puuid)} puuids.")
 
     rows = build_feature_rows(args.matches_path, info_by_puuid, args.min_game_length_seconds)
-    # Team kill/gold differentials per minute -- used to outcome-adjust features before
-    # clustering (see playstyle_space.py).
+    # Team kill/gold differentials per minute -- used to adjust features for how the game
+    # went (see playstyle_space.py).
     df = add_game_state_columns(add_derived_features(pd.DataFrame(rows)))
 
     print_sanity_report(df)

@@ -1,5 +1,5 @@
 """
-Curated feature configuration for playstyle clustering.
+Curated feature configuration: which match-v5 fields become features, and how.
 
 Hand-reviewed against data/raw/feature_variable_summary.md rather than
 re-parsed from it at runtime, so the feature set is auditable and versioned
@@ -13,8 +13,8 @@ from dataclasses import dataclass
 
 VALID_ROLES = ("TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY")
 
-# Identity/context columns carried through the feature table but never fed
-# into scaling/clustering.
+# Identity/context columns carried through the feature table but never used as
+# features.
 CONTEXT_COLUMNS = (
     "matchId",
     "puuid",

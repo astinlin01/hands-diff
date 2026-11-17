@@ -1,22 +1,22 @@
 """
-Method diagnostics: does the adjustment do what the README claims?
+Method diagnostics: do the two shape views measure what the README says they do?
 
-For each role (season-matched), on the style features (CLUSTER_FEATURE_COLUMNS), raw vs
-adjusted (playstyle_space's teammates-lead + game-length + champion adjustment):
+For each role (season-matched), on the five performance areas (performance_shape.AREAS),
+"your games" view vs "your hands" view (the second also adjusted for the champion played):
 
 - champion share of variance  eta^2 = SS_between_champions / SS_total. "How much of this
-                              feature is just which champion was played." Should drop.
-- |correlation with win|      "How much of this feature is just whether the game went
-                              well." Should drop, but not to zero: the adjustment removes
-                              the teammates' share of the outcome and keeps your own.
+                              area is just which champion was played." Should drop in the
+                              hands view.
+- |correlation with win|      "How much of this area is just whether the game went well."
+                              Not expected to reach zero: both views remove only the
+                              teammates' share of the outcome and keep your own.
 - split-half reliability      each player's games alternate into two halves; correlate the
                               half means across players (10+ games). "Is there a stable
-                              per-player signal?" Should stay well above 0. Raw
-                              correlation, not Spearman-Brown corrected.
+                              per-player signal?" Raw correlation, not Spearman-Brown corrected.
 
-Each measure is averaged over features, then reported per role and as a range across roles.
+Each measure is averaged over areas per role, and reported per area (median over roles).
 
-Run from repo root:
+Run from repo root (after build_features.py and build_timeline_features.py):
     python src/method_diagnostics.py
 """
 
@@ -30,12 +30,9 @@ import pandas as pd
 
 from champion_classes import load_champion_classes
 from feature_config import VALID_ROLES, current_season
-from playstyle_space import (
-    CLUSTER_FEATURE_COLUMNS,
-    add_game_state_columns,
-    apply_outcome_adjuster,
-    fit_outcome_adjuster,
-)
+from export_dashboard_data import merge_timeline_features
+from performance_shape import AREAS, add_shape_features, fit_shape_model, game_area_scores
+from playstyle_space import add_game_state_columns
 
 MIN_PLAYER_GAMES = 10
 MEASURES = ("champion_variance_share", "abs_win_correlation", "split_half_reliability")
@@ -92,8 +89,9 @@ def summarize_role(values: pd.DataFrame, rows: pd.DataFrame, min_games: int = MI
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Raw vs adjusted method diagnostics per role.")
+    parser = argparse.ArgumentParser(description="Games vs hands view diagnostics per role.")
     parser.add_argument("--features-path", default="data/processed/participant_features.parquet")
+    parser.add_argument("--timeline-features-path", default="data/processed/timeline_features.parquet")
     parser.add_argument("--report-path", default="data/processed/method_diagnostics.md")
     parser.add_argument("--min-games", type=int, default=MIN_PLAYER_GAMES)
     return parser.parse_args()
@@ -104,45 +102,57 @@ def _range(results: dict, version: str, measure: str) -> str:
     return f"{min(vals):.2f}–{max(vals):.2f}"
 
 
+VIEWS = ("games", "hands")
+
+
 def run(args: argparse.Namespace) -> None:
     df = add_game_state_columns(pd.read_parquet(args.features_path))
+    df = add_shape_features(merge_timeline_features(df, args.timeline_features_path))
     season = current_season(df)
     if season is not None:
         df = df[df["season"] == season]
     classes = load_champion_classes()
 
     results: dict[str, dict] = {}
+    per_area: dict[str, dict] = {}
     for role in VALID_ROLES:
         role_df = df[df["teamPosition"] == role].sort_values("gameCreation").reset_index(drop=True)
         if role_df.empty:
             continue
-        raw = role_df[CLUSTER_FEATURE_COLUMNS]
-        adjusted = apply_outcome_adjuster(role_df, fit_outcome_adjuster(role_df, classes))
-        results[role] = {
-            "raw": summarize_role(raw, role_df, args.min_games),
-            "adjusted": summarize_role(adjusted, role_df, args.min_games),
-            "n_games": len(role_df),
-            "n_players": int((role_df["puuid"].value_counts() >= args.min_games).sum()),
-        }
+        model = fit_shape_model(role_df, classes)
+        scores = {view: game_area_scores(role_df, model, view) for view in VIEWS}
+        results[role] = {view: summarize_role(scores[view], role_df, args.min_games) for view in VIEWS}
+        results[role]["n_games"] = len(role_df)
+        results[role]["n_players"] = int((role_df["puuid"].value_counts() >= args.min_games).sum())
+        for view in VIEWS:
+            for area in AREAS:
+                per_area.setdefault(area, {}).setdefault(view, []).append(
+                    summarize_role(scores[view][[area]], role_df, args.min_games)
+                )
         r = results[role]
         print(f"[{role}] n={r['n_games']}, players with {args.min_games}+ games={r['n_players']}  "
-              + "  ".join(f"{m}: {r['raw'][m]:.3f} -> {r['adjusted'][m]:.3f}" for m in MEASURES))
+              + "  ".join(f"{m}: {r['games'][m]:.3f} -> {r['hands'][m]:.3f}" for m in MEASURES))
 
+    header = ("| {} | champion share games | hands | abs(corr win) games | hands | split-half games | hands |")
     lines = [
         f"# Method diagnostics (season {season})",
         "",
-        f"Style features ({len(CLUSTER_FEATURE_COLUMNS)}), each measure averaged over features. "
-        "Adjusted = teammates' lead + game length + champion (playstyle_space).",
+        f"The {len(AREAS)} performance areas ({', '.join(AREAS)}), each measure averaged over areas. "
+        "Games view = teammates' lead + game length removed; hands view = also the champion (performance_shape).",
         "",
-        "| role | games | players (10+) | champion share raw | adjusted | abs(corr win) raw | adjusted | split-half raw | adjusted |",
+        "| role | games | players (10+) " + header.format("x")[5:],
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for role, r in results.items():
-        cells = [f"{r[v][m]:.3f}" for m in MEASURES for v in ("raw", "adjusted")]
+        cells = [f"{r[v][m]:.3f}" for m in MEASURES for v in VIEWS]
         lines.append(f"| {role} | {r['n_games']} | {r['n_players']} | " + " | ".join(cells) + " |")
+    lines += ["", "Per area (median over roles):", "", header.format("area"), "|---|---:|---:|---:|---:|---:|---:|"]
+    for area, views in per_area.items():
+        cells = [f"{np.nanmedian([d[m] for d in views[v]]):.3f}" for m in MEASURES for v in VIEWS]
+        lines.append(f"| {area} | " + " | ".join(cells) + " |")
     lines += ["", "Range across roles:", ""]
     for m in MEASURES:
-        lines.append(f"- {m}: raw {_range(results, 'raw', m)}, adjusted {_range(results, 'adjusted', m)}")
+        lines.append(f"- {m}: games {_range(results, 'games', m)}, hands {_range(results, 'hands', m)}")
     os.makedirs(os.path.dirname(args.report_path) or ".", exist_ok=True)
     with open(args.report_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")

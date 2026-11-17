@@ -5,12 +5,13 @@ merged by build_dashboard.py).
 The page recomputes everything it shows in the browser (dashboard/profile_math.js), so
 the game-window, champion, role, region and tier filters work with no server. This
 script therefore exports, per role:
-- your games: raw headline stats, champion-adjusted stats, per-game trait scores and
-  the champion's class (support subclasses applied);
+- your games: raw headline stats, champion-adjusted stats, per-game performance-shape
+  area scores in both views ("your games" / "your hands") with their stat chips, and the
+  champion's class (support subclasses applied);
 - reference curves per region and tier (percentile cutoffs of reference players'
-  averages): raw stats, champion-adjusted stats, trait profiles, and the champion-pool
-  baseline;
-- each trait's single-game reliability, the role's archetype signatures and gap list.
+  averages): raw stats, champion-adjusted stats, area scores, and the champion-pool
+  baseline; anonymous Damage/Survival points for the risk-for-damage chart;
+- the role's gap list, and each account's default comparison tier (COMPARE_TIERS).
 
 Run from repo root (after build_features.py, and build_timeline_features.py if you have
 timelines):
@@ -28,16 +29,15 @@ import numpy as np
 import pandas as pd
 import requests
 
-from accounts import require_publish_riot_ids
+from accounts import compare_tier_for, default_compare_tiers, require_publish_riot_ids
 from champion_classes import load_champion_classes, role_champion_class
 from dashboard_payload import (
     crop_splash,
     json_number,
-    player_trait_points,
     pool_reference,
     reference_by_tier,
+    shape_payload,
     splash_champions,
-    style_scores,
 )
 from feature_config import ALL_FEATURE_FIELDS, VALID_ROLES, add_derived_features, current_season
 from performance import (
@@ -47,9 +47,9 @@ from performance import (
     fit_performance_adjuster,
     gap_features_for_role,
 )
+from performance_shape import add_shape_features
 from pipeline_io import iter_ndjson
-from playstyle_space import ROLE_ARCHETYPES, add_game_state_columns
-from style_profile import CONFIDENCE_THRESHOLDS
+from playstyle_space import add_game_state_columns
 from timeline_features import TIMELINE_FEATURE_COLUMNS
 
 FEATURE_COLUMNS = [f.name for f in ALL_FEATURE_FIELDS]
@@ -438,7 +438,7 @@ def build_role_payload(
         role_champion_class(name, role, champion_classes) for name in role_df["championName"]
     ]
 
-    scores, icc, traits = style_scores(role_df, role, champion_classes)
+    shape, shape_by_game = shape_payload(role_df, champion_classes, regions, tiers)
 
     gap_features = gap_features_for_role(role)
     performance_columns = [
@@ -458,17 +458,13 @@ def build_role_payload(
                 pool_by_tier.setdefault(region, {})[tier] = pool_reference(subset)
 
     payload = {
-        "traits": traits,
-        "trait_reliability": {t: json_number(icc.get(t)) for t in traits},
-        "archetypes": ROLE_ARCHETYPES.get(role, {}),
         "gap_features": {f: list(spec) for f, spec in gap_features.items() if f in role_df.columns},
-        "style_reference": reference_by_tier(role_df, scores, regions, tiers),
-        # Style map: every reference player's trait averages, in `traits` order.
-        "trait_points": player_trait_points(role_df, scores, traits, regions, tiers),
         "adjusted_reference": reference_by_tier(role_df, adjusted, regions, tiers),
         # Adjusted values are at this game length, so per-minute gaps convert to per-game here.
         "median_game_minutes": json_number(float((role_df["gameLength"] / 60).median())),
         "pool_reference": pool_by_tier,
+        # Performance shape: five areas, "games" (as played) and "hands" (vs same champions) views.
+        "shape": shape,
     }
 
     mine = role_df["puuid"].isin(set(my_df["puuid"])).to_numpy()
@@ -476,16 +472,17 @@ def build_role_payload(
     for i in role_df.index[mine]:
         extras[(role_df.at[i, "matchId"], role_df.at[i, "puuid"])] = {
             "championClass": role_df.at[i, "champion_class"],
-            "traits": {t: json_number(scores.at[i, t]) for t in traits},
             "adjusted": {c: json_number(adjusted.at[i, c]) for c in performance_columns},
+            "shape": shape_by_game[i],
         }
     return payload, extras
 
 
 def run(args: argparse.Namespace) -> None:
     df = add_game_state_columns(add_derived_features(pd.read_parquet(args.features_path)))
-    df = merge_timeline_features(df, args.timeline_features_path)
+    df = add_shape_features(merge_timeline_features(df, args.timeline_features_path))
     riot_ids = require_publish_riot_ids(args.riot_id)
+    compare_tiers = default_compare_tiers()
 
     # Everything -- reference curves, style baselines, and your own games -- is
     # restricted to one season so you're never compared across a stat-baseline shift.
@@ -548,7 +545,7 @@ def run(args: argparse.Namespace) -> None:
     roles_payload = {}
     game_extras: dict[tuple[str, str], dict] = {}
     for role in VALID_ROLES:
-        print(f"Building style, pool and performance payload for {role}...")
+        print(f"Building shape, pool and performance payload for {role}...")
         role_payload, extras = build_role_payload(role, df, my_df, regions, tiers, champion_classes)
         roles_payload[role] = role_payload
         game_extras.update(extras)
@@ -598,9 +595,10 @@ def run(args: argparse.Namespace) -> None:
         "season": season,
         "accounts": list(accounts_summary.keys()),
         "accounts_summary": accounts_summary,
+        # Default comparison tier per account (COMPARE_TIERS in .env); null = page default.
+        "compare_tiers": {riot_id: compare_tier_for(riot_id, compare_tiers) for riot_id in accounts_summary},
         "min_own_games": MIN_OWN_GAMES,
         "full_own_games": FULL_OWN_GAMES,
-        "confidence_thresholds": [list(t) for t in CONFIDENCE_THRESHOLDS],
         "tiers": tiers,
         "regions": regions,
         "region_display_names": REGION_DISPLAY_NAMES,

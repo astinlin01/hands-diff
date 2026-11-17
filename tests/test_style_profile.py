@@ -1,13 +1,6 @@
 """
-Phase 2 tests: trait axes, soft archetype labels and profile confidence (style_profile.py).
-
-Mechanics only -- the tests pass their own small trait definitions, so they don't depend
-on the final feature -> trait mapping (that's a separate decision in playstyle_space.TRAITS).
-
-Pipeline under test, per role:
-  game-level adjusted features -> standardized (z) -> per-game trait scores (mean z of the
-  trait's available features) -> player profile (mean over games, per-trait game counts)
-  -> percentile vs other players' profiles, soft archetype labels, confidence.
+Building blocks under the performance shape (style_profile.py): early-game adjustment,
+standardizing, percentiles vs reference players, and reliability.
 
 Early (timeline) features are adjusted for champion only -- not for the teammates' lead
 or game length, which are measured at the end of the game, after the 14:00 snapshot --
@@ -22,14 +15,10 @@ import pytest
 
 from style_profile import (
     apply_early_adjuster,
-    confidence_label,
     fit_early_adjuster,
     fit_standardizer,
-    game_trait_scores,
-    player_profiles,
     profile_reliability,
     single_game_reliability,
-    soft_labels,
     standardize,
     trait_percentiles,
 )
@@ -93,31 +82,6 @@ def test_standardize_uses_population_scale():
     assert math.isnan(z.loc[3, "b"])  # NaN stays NaN
 
 
-def test_trait_score_is_mean_of_available_features():
-    z = pd.DataFrame({
-        "gold_diff_at_14": [1.0, np.nan, np.nan],
-        "lane_gold_diff_per_min": [3.0, 2.0, np.nan],
-        "early_wards_placed": [0.0, 0.0, 0.0],
-        "vision_score_per_minute": [-2.0, 1.0, 1.0],
-    })
-    scores = game_trait_scores(z, TRAITS)
-    assert scores.loc[0, "Lane Bully"] == pytest.approx(2.0)   # mean(1, 3)
-    assert scores.loc[1, "Lane Bully"] == pytest.approx(2.0)   # no timeline: end-of-game part only
-    assert math.isnan(scores.loc[2, "Lane Bully"])             # nothing available
-    assert scores.loc[0, "Vision Control"] == pytest.approx(-1.0)
-
-
-# --- Player profiles and percentiles ----------------------------------------------------------------
-
-def test_player_profile_is_mean_over_games_with_counts():
-    scores = pd.DataFrame({"Lane Bully": [1.0, 3.0, np.nan, 0.0], "Vision Control": [0.0, 0.0, 1.0, 2.0]})
-    puuids = pd.Series(["me", "me", "me", "other"])
-    profiles, counts = player_profiles(scores, puuids)
-    assert profiles.loc["me", "Lane Bully"] == pytest.approx(2.0)
-    assert counts.loc["me", "Lane Bully"] == 2      # the NaN game doesn't count
-    assert counts.loc["me", "Vision Control"] == 3
-
-
 def test_trait_percentile_vs_reference_profiles():
     reference = pd.DataFrame({"Lane Bully": [0.0, 1.0, 2.0, 3.0]})
     pct = trait_percentiles(pd.Series({"Lane Bully": 1.5}), reference)
@@ -133,28 +97,6 @@ ARCHETYPES = {
     }
 }
 
-
-def test_soft_label_picks_best_matching_archetype():
-    profile = pd.Series({"Farm-Focused": 1.2, "Death-Prone": -0.9, "Duelist": 0.1})
-    labels = soft_labels(profile, "BOTTOM", ARCHETYPES)
-    assert labels[0][0] == "Safe Farmer"
-    assert labels[0][1] > labels[1][1]
-
-
-def test_soft_label_match_is_a_bounded_percentage():
-    # Negative similarity (the opposite profile) clamps to 0%, never below.
-    profile = pd.Series({"Farm-Focused": -1.0, "Death-Prone": 1.0, "Duelist": -1.0})
-    for _, match in soft_labels(profile, "BOTTOM", ARCHETYPES):
-        assert 0.0 <= match <= 100.0
-    assert dict(soft_labels(profile, "BOTTOM", ARCHETYPES))["Safe Farmer"] == 0.0
-
-
-def test_soft_labels_returns_top_n():
-    profile = pd.Series({"Farm-Focused": 1.0, "Death-Prone": 0.5, "Duelist": 0.5})
-    assert len(soft_labels(profile, "BOTTOM", ARCHETYPES, top=1)) == 1
-
-
-# --- Confidence ---------------------------------------------------------------------------------------
 
 def test_single_game_reliability_recovers_known_icc():
     # Player effect variance 1, game-to-game noise variance 3 -> ICC = 1 / (1 + 3) = 0.25.
@@ -176,38 +118,3 @@ def test_profile_reliability_grows_with_games():
     assert profile_reliability(0.25, 20) == pytest.approx(20 * 0.25 / (1 + 19 * 0.25))
     assert profile_reliability(0.25, 5) < profile_reliability(0.25, 20) < profile_reliability(0.25, 100)
     assert profile_reliability(0.25, 0) == 0.0
-
-
-@pytest.mark.parametrize("reliability, label", [(0.3, "low"), (0.6, "medium"), (0.85, "high")])
-def test_confidence_labels(reliability, label):
-    assert confidence_label(reliability) == label
-
-
-# --- Trait mapping --------------------------------------------------------------------------------
-
-def test_no_objective_control_trait():
-    # Dropped: for laners, objective damage duplicates building damage (corr 0.81-0.90,
-    # it includes towers) and the epic share is mostly game-to-game noise; for junglers
-    # the share is at 100% in 75% of games, so it can't tell players apart. Objective
-    # participation stays in the performance gap list instead.
-    from playstyle_space import TRAITS
-
-    assert "Objective Control" not in dict(TRAITS)
-
-
-def test_archetypes_only_use_existing_traits():
-    from playstyle_space import ROLE_ARCHETYPES, TRAIT_PHRASES, TRAITS
-
-    traits = set(dict(TRAITS))
-    for role, archetypes in ROLE_ARCHETYPES.items():
-        for name, signature in archetypes.items():
-            assert set(signature) <= traits, f"{role} {name}: {set(signature) - traits}"
-    assert set(TRAIT_PHRASES) == traits
-
-
-def test_split_pusher_uses_own_building_damage_only():
-    # Turret takedowns per minute correlate 0.60 with winning (mostly team-driven);
-    # damage to buildings is the player's own output, and counts towers you didn't finish.
-    from playstyle_space import TRAITS
-
-    assert dict(TRAITS)["Split-Pusher"] == ("damage_to_buildings_per_min",)
