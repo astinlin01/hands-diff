@@ -1,102 +1,96 @@
-# Rift Archetypes
+# hands-diff
 
-**What kind of League of Legends player are you, apart from whether you won?**
+**Champ diff or hands diff? What your stats say about *you*, once your champions are accounted for.**
 
-**[→ Live scouting report](https://astinlin01.github.io/rift-archetypes/)** · a static page built by this pipeline
+**[→ Live scouting report](https://astinlin01.github.io/hands-diff/)** · a static page built by this pipeline
 
-Rift Archetypes pulls ~26k season-16 high-elo solo queue games (~260k player-games, Diamond → Challenger, NA + KR) from the Riot API and measures each player's *playstyle* while controlling for the champion they played and how their teammates did. The result is an interactive scouting report: your style traits, the archetypes you're closest to, and percentile comparisons against every reference tier and against LCK/LPL pros.
+hands-diff pulls ~26k season-16 high-elo solo queue games (~263k player-games, Diamond → Challenger, NA + KR) from the Riot API and draws your **performance shape**: five areas of your game ranked against the tier you play in, shown two ways, as played and on equal champions. Where the two disagree, your champions are doing the work (*champ diff*). Where they agree, it's you (*hands diff*).
 
-[![Scouting report: playstyle traits for a Bottom laner vs Challenger NA](docs/dashboard.png)](https://astinlin01.github.io/rift-archetypes/)
+[![Scouting report: performance shape for a Bottom laner vs Grandmaster NA](docs/dashboard.png)](https://astinlin01.github.io/hands-diff/)
 
-## Results
+## What it shows
 
-Raw match stats mostly measure *which champion you played* and *how the game went*. After the adjustment described below, both effects are largely gone, and a smaller but stable per-player signal remains.
+- **Your shape.** Laning, Farming, Damage, Survival and Objectives as percentiles among players of your tier (10+ games each). The grey shape is a typical player of that tier. Wherever yours breaks out of it, you beat most of your tier, and top-10% spikes glow.
+- **Your games vs your hands.** *Your games* = your stats as played, champions included. *Your hands* = compared with players on the same champions. Each area gets a verdict: **hands diff** when it holds up on equal champions, **champ diff** when your champions move you between strength, middle and weakness, with the champion responsible named ("Kai'Sa adds a little on top").
+- **What your damage costs you.** Damage across, Survival up: *efficient carry*, *glass cannon*, *safe, low impact* or *struggling*, next to every player in your tier and the typical player of the other tiers.
+- **Also:** champion pool vs your tier, every headline stat as a percentile (raw and "on your champions, in an even game"), your biggest gaps, nearest pro (LCK/LPL), and your games.
 
-| Season 16, per role (range across the 5 roles) | Raw stats | Adjusted | What it means |
-|---|---:|---:|---|
-| Champion's share of feature variance | 16–23% | **0.2–1.7%** | Style is measured relative to the champion you played. "Malphite tanks more than Jinx" is no longer a style difference. |
-| Correlation with winning (absolute) | 0.19–0.24 | **0.04–0.11** | Your teammates' share of the outcome is removed. Your own contribution is kept on purpose. |
-| Split-half reliability of player profiles | 0.51–0.56 | **0.41–0.47** | Half of a player's games still predicts the other half: there's a real, stable style signal to measure. |
+**Compare against the tier you actually play in.** Matchmaking pairs you with players of your MMR, so the fair ruler is that tier, which can differ from your displayed rank (e.g. Master rank, GM lobbies). Set it per account with `COMPARE_TIERS`. The page can switch to any tier, and higher tiers show up as targets.
 
-Each number is the mean over 42 style features; players with 10+ games for reliability. Reproduce with `python src/method_diagnostics.py`, whose calculations are covered by hand-checked tests.
+## How it works
 
-**Takeaways**
+Raw match stats mostly measure *which champion you played* and *how the game went*. A stomp inflates damage, gold, CS and objectives all at once. Each area is built to remove what isn't yours:
 
-- **Most of what looks like playstyle in raw stats is champion and game state.** Removing both cuts the champion effect by 89–99% and the win correlation by 50–78% (depending on role), while keeping 75–84% of the player-level reliability.
-- **Playstyle is a continuum, not a set of types.** K-means found weak cluster structure (silhouette 0.12–0.15) and collapsed every role into carry / farmer / low-resource. That's why the project is moving to continuous trait axes with soft archetype labels (see [Roadmap](#roadmap)).
+1. **Teammates' lead and game length come out of both views.** Per role, every stat is regressed on your four teammates' kill/gold lead over the four enemies outside your lane, plus a spline of game length, and read at a typical, even, median-length game. Your *own* lead stays in: these are performance areas, and being ahead is the point.
+2. **The champion comes out of "your hands" too.** Champion fixed effects, with rare champions (under 30 games in the role) pooled into their Data Dragon class. Early-game stats (≤14:00) are adjusted for champion only, since the end-of-game context comes after them.
+3. **The matchup is not adjusted for, on purpose.** Enemy laners change single games (they explain up to 8% more of CS diff @10), but over a profile they wash out because you don't pick your opponents: profiles with and without the matchup adjustment correlate at **0.96–1.00**.
+4. **Averages vs averages, as percentiles.** Your average over the selected games is ranked against other players' averages (10+ games), season-matched, never against single games.
 
-## The hard part: separating playstyle from outcome
+| Area | Built from |
+|---|---|
+| Laning | CS diff @10, gold and XP diff @14, max CS lead, turret plates |
+| Farming | CS/min, gold/min, share of team gold, lane minions by 10:00 |
+| Damage | damage/min, share of team damage, damage per gold |
+| Survival | deaths per minute and before 14:00 (fewer = higher) |
+| Objectives | building and objective damage, turret participation |
 
-Naively clustering per-minute stats doesn't find playstyles. It finds *how the game went*. A stomp inflates damage, gold, KDA and objectives all at once, so the first version's "archetypes" had win rates of ~15% / ~60% / ~90%: losing, average, winning. Most of the project is about removing that confound without throwing away real style signal.
+## Does it hold up?
 
-1. **Adjust for game context, then measure the residuals.** Per role, every feature is regressed on game-context covariates and style is measured on what's left over: "how did this game differ from a typical game in the same situation?" (`src/playstyle_space.py`)
-2. **Control for teammates' lead, not the result.** Regressing on the win flag would also subtract out styles that *cause* wins. The adjustment controls only for your four teammates' lead over the four enemies outside your lane, so your own contribution stays in. That's why the win correlation drops to 0.04–0.11 rather than zero.
-3. **Adjust for champion.** Champion fixed effects, with rare champions (under 30 games in a role) pooled into their Data Dragon class.
-4. **Add early-game timeline features.** End-of-game totals are mostly *effect*. What a player does before 14:00 (CS diff @10, gold/XP diff @14, early trades, roams, warding) is mostly *cause*, so it's a cleaner style signal. These are adjusted for champion only, since end-of-game context comes after them. (`src/timeline_features.py`)
-5. **Measure confidence.** Each trait gets a reliability from how much a single game reveals about a player (ICC) and how many games you've played (Spearman–Brown), shown as low / medium / high. (`src/style_profile.py`)
+`hands-diff diagnostics` measures both views on the season's reference players (calculations covered by hand-checked tests):
 
-Comparisons follow a few fixed conventions:
+| Five areas, season 16 (median over roles) | Your games | Your hands |
+|---|---:|---:|
+| Champion's share of the area's variance | 5–13% | **≈0%** |
+| Correlation with winning (absolute) | 0.11–0.27 | 0.11–0.27 |
+| Split-half reliability of player averages | 0.55–0.68 | 0.39–0.56 |
 
-- **Season-matched.** Baselines shift between seasons (bot-lane median CS/min ~7.4 in S15, ~8.1 in S16), so you're only ever compared within one season.
-- **Averages vs. averages.** Your average is ranked against other players' averages (10+ games), not against single games, which have far more spread.
-- **Percentiles, not raw differences.**
-- **Percentiles use raw stats.** The adjustment is only for measuring style. For "how good is your gold/min", being ahead *is* the point.
+- **The hands view removes the champion completely,** and leaves the link to winning alone. Your own lead is kept on purpose.
+- **Shapes are real.** With each player's overall level taken out, their shape from odd games matches their shape from even games at a median r of **0.71–0.78** (games) and **0.58–0.66** (hands), against ~0 for random pairs (players with 20+ games).
+- **It's not one "good at the game" number.** The biggest common factor explains 49–57% of the differences between players. Five independent areas would be 20%, and a single factor would be 100%.
+- **Damage costs deaths.** Survival is the most independent area and runs against Damage (−0.21 to −0.51 across roles, −0.37 for bot). That trade-off is the risk-for-damage chart.
 
-## Roadmap
+### How we got here
 
-The first version grouped games with k-means. Even after the champion and teammate adjustments, every non-support role split mainly into carry / farmer / low-resource, with cluster win rates from 37% to 74%: a resource-share axis rather than a playstyle. So the product is moving from clusters to continuous trait axes.
+Version 1 clustered games with k-means and found *how the game went* (cluster win rates of ~15% / ~60% / ~90%). Version 2 removed that with the adjustments above and measured 15 hand-built playstyle traits with archetype labels. A full review on the complete timeline data showed those 15 traits measured about 7 things, and the ones that were both stable and unrelated to winning (vision, ability usage, crowd control) said little about how an ADC plays. Most of what people call style in solo queue turned out to be champion choice or output. So this version measures output directly, and separates the part that comes from your champions.
 
-**Done**
-- [x] Champion adjustment, with rare champions pooled by class
-- [x] Teammates'-lead adjustment in place of the win flag
-- [x] Early-game timeline features, tested on 9 hand-checked games across all five roles
-- [x] Trait-axis profiles, soft archetype labels ("72% Safe Farmer, 41% Vision-Focused Carry") and per-trait confidence
-- [x] Method diagnostics (the [Results](#results) table)
-
-**Next**
-- [ ] Timeline backfill for the whole season, so early-game traits cover the full reference population
-- [ ] Dashboard rewrite around trait axes, soft labels and confidence, replacing the cluster cards and k slider (and the dashboard's separate cluster refit)
-- [ ] Champion pool as its own layer: your class mix and champion concentration vs. the reference tier
-- [ ] Class-matched performance percentiles, so a Jinx main isn't compared against every ADC game, plus a "biggest gaps" list
-- [ ] An explicit "insufficient data (n=X)" message wherever a comparison group is too small, instead of hiding the section
-
-**Later**
-- [ ] Pro team clustering from Oracle's Elixir data (Riot's API doesn't expose LCK/LEC matches)
-
-## Testing
-
-The accuracy suite encodes the analysis conventions against real games whose expected values were checked by hand (`tests/`): CS including jungle camps, per-minute normalization, season tagging, remake exclusion, outcome and champion adjustment, timeline features across all five roles, trait profiles and confidence, and the diagnostics behind the Results table.
-
-```
-pytest
-```
-
-The fixture games are real match payloads with every player identity replaced by a salted hash (`src/anonymize_fixtures.py`, enforced by `tests/test_fixture_privacy.py`).
-
-## Quickstart
+## Run it yourself
 
 ```
 python -m venv venv
 venv\Scripts\activate            # source venv/bin/activate on macOS/Linux
 pip install -r requirements.txt
-copy .env.example .env           # cp on macOS/Linux; then fill in RIOT_API_KEY, RIOT_IDS and PUBLISH_RIOT_IDS
+pip install -e .                 # installs the hands-diff command
+copy .env.example .env           # cp on macOS/Linux; then fill it in
 ```
 
 - `RIOT_API_KEY`: a development key from the [Riot developer portal](https://developer.riotgames.com). These expire every 24h.
-- `RIOT_IDS`: your account(s) as `gameName#tagLine`, comma-separated. Every script that takes `--riot-id` defaults to this.
-- `PUBLISH_RIOT_IDS`: the accounts shown on the public dashboard. The dashboard export uses only this list (or `--riot-id`) and never falls back to `RIOT_IDS`, so an account is published only if you list it.
+- `RIOT_IDS`: your accounts as `gameName#tagLine`, comma-separated.
+- `PUBLISH_RIOT_IDS`: the accounts shown on the published page. The export never falls back to `RIOT_IDS`, so an account is published only if you list it.
+- `COMPARE_TIERS`: each account's default comparison tier, e.g. `yourname#na1:GRANDMASTER`.
 
-## Pipeline
+Then, from the repo root:
 
-1. **Player pool:** `fetch_league_pool.py`, one file per tier and region
-2. **Match IDs:** `fetch_match_ids.py`, deduped across the pool, always including your own accounts
-3. **Match data:** `fetch_match_details.py` and `fetch_match_timelines.py`
-4. **Features:** `build_features.py` and `build_timeline_features.py`
-5. **Style model:** `build_clusters.py` fits the per-role adjustment; `method_diagnostics.py` checks it
-6. **You:** `compare_self.py`, or `fetch_recent_self.py` to refresh just your own games
-7. **Dashboard:** `export_dashboard_data.py`, then `build_dashboard.py`
+```
+hands-diff refresh               # your new games -> features -> timelines -> export -> docs/index.html
+hands-diff                       # every command; each takes --help
+```
 
-The full pool pull takes a while on a dev key's rate limit. Every script, its options and the exact run order are in **[docs/pipeline.md](docs/pipeline.md)**.
+Building the reference population from scratch (player pools, match IDs, match data, timelines) takes a while on a dev key's rate limit. Every command, data file and the full run order are in **[DEVELOPING.md](DEVELOPING.md)**.
+
+## Testing
+
+```
+pytest
+```
+
+The suite encodes the analysis conventions against real games whose expected values were checked by hand: CS including jungle camps, per-minute normalization, season tagging, remake exclusion, the outcome and champion adjustments, timeline features across all five roles, the areas and both views, the diagnostics, an end-to-end export, and the page's JavaScript math run through Node against the Python originals. Fixture games are real match payloads with every player identity replaced by a salted hash (`hands_diff.tools.anonymize_fixtures`, enforced by a test).
+
+## Limitations
+
+- **Tier is a snapshot.** Reference players are tagged with their rank on the day their pool was fetched, not at game time.
+- **Percentiles squeeze at the top.** Far above your comparison tier, every area sits at 90+ and the shape says less. Compare against a higher tier.
+- **Champion pool is its own question.** The hands view takes your champions out on purpose. What you choose to play is shown separately, in the champion pool section.
+- **Kill participation isn't an area.** It tracked Damage at up to 0.86 and was the least reliable candidate (0.42–0.63 at 20 games), so it's shown only as a stat.
 
 ---
 
@@ -104,4 +98,4 @@ The full pool pull takes a while on a dev key's rate limit. Every script, its op
 
 Code: [MIT](LICENSE). Match data via the [Riot Games API](https://developer.riotgames.com); pro match data from [Oracle's Elixir](https://oracleselixir.com).
 
-Rift Archetypes isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
+hands-diff isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.

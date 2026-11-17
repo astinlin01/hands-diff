@@ -1,5 +1,5 @@
 """
-Simple EDA for Rift Archetypes raw collection files.
+Simple EDA for the raw collection files.
 
 Run from repo root:
     python src/eda_overview.py
@@ -268,7 +268,7 @@ def profile_dataset(
 
 def render_report(profiles: list[dict[str, Any]]) -> str:
     lines: list[str] = []
-    lines.append("# Rift Archetypes EDA Report")
+    lines.append("# hands-diff EDA report")
     lines.append("")
     lines.append(f"Generated at: {utc_now_iso()}")
     lines.append("")
